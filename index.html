@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&family=Aref+Ruqaa:wght@700&display=swap">
 <style>
 /* Layout: a fixed full-screen shell — navy top bar (covers the clock area), one scrolling content area, tab bar on the bottom edge */
 :root{
@@ -32,7 +32,7 @@
   --navy:#16426b;--navy-soft:#1b2a3a;--navy-line:#2b3f55;--gold:#d4a94f;--gold-ink:#e2bd6a;--gold-soft:#2a2416;--gold-line:#4a3c1e;--gold-hi:#4a3c1a;
   --bg:#0f151d;--card:#161f2a;--card2:#131b25;--line:#253243;--line2:#1d2836;--field:#1b2531;--ink:#e9eef4;--mut:#9fb0c2;--link:#9cc3ea;--danger:#e07a72;--ok:#7cc4a4;--ok-soft:#16302a;color-scheme:dark}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;overflow:hidden;background:var(--card)}
+html,body{margin:0;height:100%;overflow:hidden;background:#123c63}
 body{font-family:var(--ui);font-size:15px;color:var(--ink);direction:rtl;-webkit-text-size-adjust:100%}
 body.f-naskh{--text:'Noto Naskh Arabic','Geeza Pro',serif}
 body.f-plex{--text:'IBM Plex Sans Arabic',-apple-system,sans-serif}
@@ -41,7 +41,28 @@ button{cursor:pointer}
 input,textarea,select{font-size:16px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 [hidden]{display:none!important}
-#root{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+#root{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+/* home title: library name (Amiri) + owner signature (Ruqaa) */
+.brandt{display:flex;flex-direction:column;align-items:center;text-align:center;gap:0}
+.brandt .lib{font-family:'Amiri',serif;font-size:27px;font-weight:700;line-height:1.4;color:#fff}
+.orn{display:flex;align-items:center;gap:8px;margin:5px 0 1px}
+.orn i{height:1px;width:42px;background:linear-gradient(90deg,transparent,#d4a94f)}
+.orn i:last-child{background:linear-gradient(270deg,transparent,#d4a94f)}
+.orn b{width:5px;height:5px;background:#d4a94f;transform:rotate(45deg)}
+.brandt .own{font-family:'Aref Ruqaa','Amiri',serif;font-size:27px;font-weight:700;color:#e7c27a;line-height:1.6}
+/* splash cover */
+#splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:60;background:radial-gradient(120% 80% at 50% 45%,#1a4f80 0%,#123c63 55%,#0d2d4b 100%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 30px;transition:opacity .35s ease}
+#splash.out{opacity:0;pointer-events:none}
+#splash .fr{position:absolute;border:1px solid rgba(212,169,79,.55);border-radius:22px;top:calc(var(--st) + 14px);bottom:calc(var(--sb) + 26px);left:22px;right:22px}
+#splash .fr2{position:absolute;border:1px solid rgba(212,169,79,.25);border-radius:16px;top:calc(var(--st) + 22px);bottom:calc(var(--sb) + 34px);left:30px;right:30px}
+#splash .in{display:flex;flex-direction:column;align-items:center;transition:opacity .3s ease}
+#splash.wait .in{opacity:0}
+#splash .dia{width:10px;height:10px;background:#d4a94f;transform:rotate(45deg);margin-bottom:26px}
+#splash .lib{font-family:'Amiri',serif;font-size:min(40px,9.6vw);font-weight:700;line-height:1.35;text-align:center}
+#splash .orn{margin:18px 0 10px}#splash .orn i{width:60px}#splash .orn b{width:6px;height:6px}
+#splash .own{font-family:'Aref Ruqaa','Amiri',serif;font-size:min(40px,9.6vw);font-weight:700;color:#e7c27a;line-height:1.5}
+#splash .tap{position:absolute;bottom:calc(var(--sb) + 52px);font-size:12px;color:rgba(201,214,228,.75)}
+@media (prefers-reduced-motion:reduce){#splash,#splash .in{transition:none}}
 
 /* top bar */
 #top{flex:none;background:var(--navy);color:#fff;padding:calc(var(--st) + 10px) var(--sr) 12px var(--sl);display:flex;flex-direction:column;gap:12px}
@@ -185,6 +206,7 @@ mark{background:var(--gold-hi);color:inherit;border-radius:4px;padding:0 2px}
 </style>
 </head>
 <body>
+<div id="splash" class="wait" role="img" aria-label="مكتبة الأنظمة الخاصة — جبران طالع التليدي"><span class="fr"></span><span class="fr2"></span><div class="in"><span class="dia"></span><div class="lib">مكتبة الأنظمة الخاصة</div><div class="orn"><i></i><b></b><i></i></div><div class="own">جبران طالع التليدي</div></div><span class="tap">المس للدخول</span></div>
 <div id="root">
   <header id="top"></header>
   <main id="main"></main>
@@ -285,7 +307,7 @@ function topBar(title,sub,right){return '<div class="tr"><button class="ib" data
 function vHome(){
   const h=new Date().getHours();
   top.className='home';
-  top.innerHTML='<div class="tr"><div class="tt"><span class="hello">'+(h<12?'صباح الخير':'مساء الخير')+'</span><h1 class="h1">الأنظمة</h1></div></div><form class="search" id="hs" role="search">'+IC.search+'<input id="hq" type="search" enterkeyhint="search" placeholder="رقم مادة، كلمة، أو «مرافعات 55»" autocomplete="off" aria-label="بحث"></form>';
+  top.innerHTML='<div class="brandt"><h1 class="lib" style="margin:0">مكتبة الأنظمة الخاصة</h1><div class="orn" aria-hidden="true"><i></i><b></b><i></i></div><div class="own">جبران طالع التليدي</div></div><form class="search" id="hs" role="search">'+IC.search+'<input id="hq" type="search" enterkeyhint="search" placeholder="رقم مادة، كلمة، أو «مرافعات 55»" autocomplete="off" aria-label="بحث"></form>';
   if(!S.loaded)return '<div class="wrap"><div class="empty">'+(S.err?'<b>تعذر تحميل الأنظمة.</b><br>'+esc(S.err):'يتم التحميل…')+'</div></div>';
   const rec=U.recent.map(fromKey).filter(Boolean).slice(0,3);
   const counts={};S.order.forEach((id)=>{const c=S.laws[id].cat||'other';counts[c]=(counts[c]||0)+1;});
@@ -383,7 +405,7 @@ function vSet(){
    '<div class="field"><label for="ak">مفتاح API</label><input id="ak" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+(U.key?'•••••••• (محفوظ)':'sk-ant-api…')+'"></div>'+
    '<div class="btns"><button class="btn navy" data-act="keySave">حفظ المفتاح</button>'+(U.key?'<button class="btn danger" data-act="keyDel">حذف المفتاح</button>':'')+'</div>'+
    '<div class="field"><label>النموذج</label><div class="seg"><button data-model="quick" aria-pressed="'+(U.model!=='strong')+'">سريع واقتصادي</button><button data-model="strong" aria-pressed="'+(U.model==='strong')+'">أقوى</button></div></div></div>'+
-   '<p class="muted">الإصدار '+esc(S.ver||'')+' · الأنظمة: '+S.order.length+'</p></div>';
+   '<p class="muted">الإصدار '+APP_VER+' · الأنظمة '+esc(S.ver||'')+' ('+S.order.length+')</p></div>';
 }
 
 /* ---------- ask ---------- */
@@ -475,6 +497,25 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
+const APP_VER='2026-11-05b';
+/* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
+   When that happens, size the shell to the full screen instead. */
+function fitShell(){
+  const st=navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;
+  let h=innerHeight;const sh=screen.height;
+  if(st&&sh-h>=20&&sh-h<=90)h=sh;
+  ['root','splash'].forEach((id)=>{const el=$(id);if(el){el.style.bottom='auto';el.style.height=h+'px';}});
+}
+fitShell();addEventListener('resize',fitShell);addEventListener('orientationchange',()=>setTimeout(fitShell,300));
+(function splash(){
+  const sp=$('splash');if(!sp)return;let gone=false;
+  const hide=()=>{if(gone)return;gone=true;sp.classList.add('out');setTimeout(()=>sp.remove(),400);};
+  sp.addEventListener('click',hide);
+  const show=()=>{sp.classList.remove('wait');setTimeout(hide,1100);};
+  const fonts=document.fonts&&document.fonts.load?Promise.all([document.fonts.load('700 40px "Aref Ruqaa"'),document.fonts.load('700 40px "Amiri"')]):Promise.resolve();
+  Promise.race([fonts,new Promise((r)=>setTimeout(r,600))]).then(show,show);
+  setTimeout(hide,3000);
+})();
 applyFont();
 render(true);
 fetch('laws.json',{cache:'no-cache'}).then((r)=>{if(!r.ok)throw new Error('رمز '+r.status);return r.json();}).then((p)=>{
