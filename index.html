@@ -33,6 +33,9 @@
   --bg:#0f151d;--card:#161f2a;--card2:#131b25;--line:#253243;--line2:#1d2836;--field:#1b2531;--ink:#e9eef4;--mut:#9fb0c2;--link:#9cc3ea;--danger:#e07a72;--ok:#7cc4a4;--ok-soft:#16302a;color-scheme:dark}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:#123c63;overscroll-behavior:none}
+/* iOS 26 home-screen apps (WebKit bug 301108): the view is cut short by the status-bar height while the page
+   is shorter than the screen. Giving the page a full-screen minimum height makes iOS give it the whole screen. */
+@media (display-mode: standalone){html{min-height:min(100lvh,calc(100% + env(safe-area-inset-top,0px)))}}
 body{font-family:var(--ui);font-size:15px;color:var(--ink);direction:rtl;-webkit-text-size-adjust:100%}
 body.f-naskh{--text:'Noto Naskh Arabic','Geeza Pro',serif}
 body.f-plex{--text:'IBM Plex Sans Arabic',-apple-system,sans-serif}
@@ -500,7 +503,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-05e';
+const APP_VER='2026-11-05f';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
@@ -509,7 +512,7 @@ function fitShell(){
   /* iOS home-screen apps sometimes report a viewport shorter than the screen by the status-bar height.
      The page itself still covers the whole screen, so the shell is sized to the full screen height
      (html/body no longer clip with overflow:hidden, which used to cut the tab bar off). */
-  const stretch=st&&gap>=20&&gap<=90;const h=stretch?sh:ih;
+  const stretch=false;const h=ih;
   document.documentElement.classList.remove('short');
   ['root','splash'].forEach((id)=>{const el=$(id);if(el){el.style.bottom='auto';el.style.height=h+'px';}});
   S.diag='الشاشة '+sh+' · العرض '+ih+' · الفرق '+gap+(stretch?' · ممتد':'')+' · '+(st?'تطبيق':'متصفح');
