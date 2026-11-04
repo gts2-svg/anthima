@@ -1,4 +1,4 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><title>الأنظمة</title>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><title>الأنظمة</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#123c63">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -38,7 +38,7 @@ a{color:var(--navy)}
 .pad{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .ic{width:20px;height:20px;flex:none}
 /* header band */
-.band{background:var(--navy);color:var(--on-navy);padding-block:20px 20px;border-radius:0 0 26px 26px;display:flex;flex-direction:column;gap:14px}
+.band{background:var(--navy);color:var(--on-navy);padding-block:calc(20px + env(safe-area-inset-top,0px)) 20px;border-radius:0 0 26px 26px;display:flex;flex-direction:column;gap:14px}
 .band.flat{border-radius:0}
 .hello{font-size:13px;color:var(--on-navy-gold);font-weight:600}
 .h1{font-size:24px;font-weight:700;margin:0}
@@ -92,7 +92,7 @@ main{flex:1;display:flex;flex-direction:column;gap:14px;padding-block:18px 8px}
 .seg button[aria-pressed="true"]{background:var(--card);color:var(--navy);font-weight:700;box-shadow:0 1px 2px rgba(18,60,99,.12)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:var(--gold-ink)}}
 :root[data-theme="dark"] .seg button[aria-pressed="true"]{color:var(--gold-ink)}
-.hdr{background:var(--card);border-bottom:1px solid var(--line);padding-block:16px 14px;display:flex;flex-direction:column;gap:12px}
+.hdr{background:var(--card);border-bottom:1px solid var(--line);padding-block:calc(16px + env(safe-area-inset-top,0px)) 14px;display:flex;flex-direction:column;gap:12px}
 .hdr h1{margin:0;font-size:19px;font-weight:700}
 .hdr small{font-size:12px;color:var(--mut)}
 .chap{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
@@ -142,7 +142,7 @@ textarea.notes{width:100%;min-height:140px;border:1px solid var(--line);border-r
 .src .tt span{font-family:var(--text);font-size:16px;line-height:1.8}
 .askbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:1px solid var(--line);padding-block:10px;z-index:5}
 .askbar .in{max-width:560px;margin:0 auto;display:flex;gap:8px;align-items:center}
-.askbar label{flex:1;background:var(--field);border-radius:22px;min-height:48px;display:flex;align-items:center;padding:0 14px}
+.askbar label{flex:1;min-width:0;background:var(--field);border-radius:22px;min-height:48px;display:flex;align-items:center;padding:0 14px}
 .askbar input{border:0;outline:0;flex:1;min-width:0;font-size:15px;background:transparent}
 .send{width:48px;height:48px;border-radius:50%;border:0;background:var(--navy);color:#fff;display:grid;place-items:center;flex:none}
 .dots{display:inline-flex;gap:4px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--mut);animation:b 1s infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
@@ -150,6 +150,9 @@ textarea.notes{width:100%;min-height:140px;border:1px solid var(--line);border-r
 @media (prefers-reduced-motion:reduce){.dots i{animation:none}.chev{transition:none}}
 /* nav */
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:8px 8px calc(10px + env(safe-area-inset-bottom,0px));z-index:6}
+nav.tabbar::after{content:"";position:absolute;left:0;right:0;top:100%;height:200px;background:var(--card)}
+body.kb nav.tabbar{display:none}
+body.kb .askbar{bottom:0}
 nav.tabbar .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 nav.tabbar a{text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--mut);font-size:11px;min-height:46px;justify-content:center}
 nav.tabbar a[aria-current="page"]{color:var(--navy);font-weight:700}
@@ -346,7 +349,7 @@ function vHome(){
 function vLaws(cat){
   const ids=S.order.filter(id=>!cat||(S.laws[id].cat||'other')===cat);
   return '<div class="hdr pad"><div class="rowx">'+(cat?'<a class="iconbtn light" href="#laws" aria-label="كل الأنظمة">'+I.back+'</a>':'')+'<div class="sp"><h1>'+(cat?esc(catName(cat)):'الأنظمة')+'</h1><small>'+ids.length+' '+(ids.length>2&&ids.length<11?'أنظمة':'نظام')+'</small></div>'+(S.isOwner?'<a class="iconbtn light" href="#import" aria-label="إضافة نظام">'+I.plus+'</a>':'')+'</div></div>'+
-  '<main class="pad">'+(ids.length?'<div class="list">'+ids.map(id=>{const L=S.laws[id];const n=(S.arts[id]||[]).length;return '<a class="item" href="#law-'+id+'"><span class="num lt" style="font-size:12px">'+n+'</span><span class="tt"><b>'+esc(L.name)+'</b><small>'+esc(catName(L.cat||'other'))+(L.partial?' · مواد مختارة':'')+'</small></span>'+I.left+'</a>'}).join('')+'</div>':(S.loaded?emptyLaws():'<div class="empty">يتم التحميل…</div>'))+'</main>';
+  '<main class="pad">'+(ids.length?'<div class="list">'+ids.map(id=>{const L=S.laws[id];const n=(S.arts[id]||[]).length;return '<a class="item" href="#law-'+id+'"><span class="num lt" style="font-size:12px;display:flex;flex-direction:column;line-height:1.15;gap:1px">'+n+'<small style="font-size:9.5px;font-weight:500">مادة</small></span><span class="tt"><b>'+esc(L.name)+'</b><small>'+esc(catName(L.cat||'other'))+(L.partial?' · مواد مختارة':'')+'</small></span>'+I.left+'</a>'}).join('')+'</div>':(S.loaded?emptyLaws():'<div class="empty">يتم التحميل…</div>'))+'</main>';
 }
 function vLaw(id){
   const L=S.laws[id];if(!L) return vMissing();
@@ -413,6 +416,7 @@ function vAsk(){
       (m.keys||[]).map(k=>{const a=fromKey(k);if(!a)return '';const L=S.laws[a.lawId];let t=esc(a.text);const hl=m.hl&&m.hl[k];if(hl&&a.text.includes(hl)){t=esc(a.text.slice(0,a.text.indexOf(hl)))+'<mark>'+esc(hl)+'</mark>'+esc(a.text.slice(a.text.indexOf(hl)+hl.length))}
         return '<a class="src" href="'+artRef(a)+'"><span class="num s">'+esc(label(a))+'</span><span class="tt"><small>'+esc(L.name)+'</small><span>'+t+'</span></span></a><button class="btn" data-cite="'+esc(k)+'">'+I.pen+'نسخ المادة ('+esc(label(a))+') للتسبيب</button>'}).join('')+'</div>';
   }).join('');
+  if(!window.claude)return '<div class="hdr pad"><h1>اسأل الأنظمة</h1><small>السؤال بالمعنى</small></div><main class="pad"><div class="note"><b>غير مفعّلة بعد:</b> هذه الخدمة تحتاج ربطاً بـClaude، وتُضاف في تحديث قادم. إلى ذلك الحين استخدم البحث من الرئيسية برقم المادة أو بكلمة من نصها.</div><a class="btn navy" style="text-decoration:none" href="#home">الذهاب للبحث</a></main>';
   return '<div class="hdr pad"><div class="rowx"><div class="sp"><h1>اسأل الأنظمة</h1><small>اكتب كما تتكلم، والجواب من نصوص الأنظمة المحفوظة مع رقم المادة</small></div>'+(S.chat.length?'<button class="link" id="clearChat">محادثة جديدة</button>':'')+'</div></div>'+
   '<main class="pad" style="padding-bottom:84px">'+(msgs||('<div class="empty"><b>أمثلة</b>«المدعي غاب بعد ما انشطبت دعوته ورجع وغاب مره ثانيه وش يصير»<br>«ابغى نص الماده اللي تقول اللي يغلط ويضر غيره يعوضه»</div>'+(S.order.length?'':emptyLaws())))+'</main>'+
   '<form class="askbar pad" id="askForm"><div class="in"><label for="aq"><input id="aq" placeholder="اكتب سؤالك…" autocomplete="off" enterkeyhint="send"></label><button class="send" aria-label="إرسال"'+(S.busy?' disabled':'')+'>'+I.send+'</button></div></form>';
@@ -555,6 +559,8 @@ $app.addEventListener('input',e=>{
 });
 
 /* ---------- boot ---------- */
+document.addEventListener('focusin',e=>{if(e.target.matches('input,textarea,select'))document.body.classList.add('kb')});
+document.addEventListener('focusout',()=>setTimeout(()=>{const a=document.activeElement;if(!a||!a.matches('input,textarea,select'))document.body.classList.remove('kb')},50));
 if(location.hash==='#import')S.imp={cat:'qadaa'};
 render();
 loadAll();
