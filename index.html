@@ -197,9 +197,10 @@ mark{background:var(--gold-hi);color:inherit;border-radius:4px;padding:0 2px}
 .sec>b{font-size:15px}
 
 /* tab bar */
-#tabs{flex:none;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px var(--sr) calc(var(--sb) + 6px) var(--sl)}
-#tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--mut);font-size:11px;min-height:48px;position:relative}
-#tabs button[aria-current="page"]{color:var(--link);font-weight:700}
+html.short{--sb:0px}
+#tabs{flex:none;background:#123c63;border-top:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px var(--sr) calc(var(--sb) + 6px) var(--sl)}
+#tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:rgba(255,255,255,.72);font-size:11px;min-height:48px;position:relative}
+#tabs button[aria-current="page"]{color:#e7c27a;font-weight:700}
 #tabs .cnt{position:absolute;top:2px;inset-inline-start:calc(50% + 6px);background:var(--gold);color:#fff;border-radius:10px;font-size:10px;padding:0 5px;line-height:16px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sb) + 76px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;max-width:88%;text-align:center}
 @media (prefers-reduced-motion:reduce){.dots i{animation:none}}
@@ -497,13 +498,15 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-05b';
+const APP_VER='2026-11-05c';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
   const st=navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;
-  let h=innerHeight;const sh=screen.height;
-  if(st&&sh-h>=20&&sh-h<=90)h=sh;
+  const h=innerHeight;const gap=screen.height-h;
+  /* iOS sometimes gives the app a view shorter than the screen; the strip below it is painted navy (the page background),
+     so the navy tab bar sits flush on it and the bottom safe-area padding is not needed. */
+  document.documentElement.classList.toggle('short',st&&gap>=20&&gap<=90);
   ['root','splash'].forEach((id)=>{const el=$(id);if(el){el.style.bottom='auto';el.style.height=h+'px';}});
 }
 fitShell();addEventListener('resize',fitShell);addEventListener('orientationchange',()=>setTimeout(fitShell,300));
