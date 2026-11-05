@@ -416,13 +416,18 @@ function vSet(){
 
 /* ---------- ask ---------- */
 function parseJSON(t){const s=String(t||'');const i=s.indexOf('{'),j=s.lastIndexOf('}');if(i<0||j<i)return null;try{return JSON.parse(s.slice(i,j+1));}catch(e){return null;}}
-async function callClaude(tier,prompt,max){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':U.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:max||900,system:'أنت مساعد بحث لقاضٍ سعودي في نصوص الأنظمة السعودية. تجيب بالعربية الفصحى، وتُخرج JSON فقط.',messages:[{role:'user',content:prompt}]})});
+async function callClaude(tier,prompt,max,schema){
+  const body={model:tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:max||900,system:'أنت مساعد بحث لقاضٍ سعودي في نصوص الأنظمة السعودية. تجيب بالعربية الفصحى.',messages:[{role:'user',content:prompt}]};
+  if(schema){body.tools=[{name:'reply',description:'أعد الجواب بهذه الحقول',input_schema:schema}];body.tool_choice={type:'tool',name:'reply'};}
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':U.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok){const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الأسئلة، انتظر قليلاً ثم اسأل.':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'تعذر الحصول على جواب ('+r.status+').');}
-  return (j.content||[]).filter((c)=>c.type==='text').map((c)=>c.text).join('');
+  if(!r.ok){const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الأسئلة، انتظر قليلاً ثم اسأل.':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'تعذر الحصول على جواب ('+r.status+(msg?': '+msg.slice(0,80):'')+').');}
+  const c=j.content||[];const tu=c.find((x)=>x.type==='tool_use');
+  const text=c.filter((x)=>x.type==='text').map((x)=>x.text).join('');
+  return {data:tu?tu.input:parseJSON(text),text,stop:j.stop_reason||''};
 }
+const SCH1={type:'object',properties:{understood:{type:'string',description:'السؤال بصياغة نظامية فصيحة موجزة'},laws:{type:'array',items:{type:'string'},description:'معرّفات الأنظمة المعنية من القائمة، من 1 إلى 4'},terms:{type:'array',items:{type:'string'},description:'10 إلى 16 كلمة أو عبارة قصيرة يُرجح ورودها حرفياً في نص المادة، مع مرادفاتها في النظام المعني'},article:{type:'string',description:'رقم مادة إن ذكره السائل صراحة وإلا فارغ'}},required:['understood','laws','terms']};
+const SCH2={type:'object',properties:{answer:{type:'string',description:'جواب موجز من جملتين إلى أربع جمل يذكر أرقام المواد'},keys:{type:'array',items:{type:'string'},description:'مفاتيح كل المواد التي تتناول السؤال مرتبة بالأهمية، من 1 إلى 6، كما هي بين الأقواس المعقوفة'},quotes:{type:'array',items:{type:'object',properties:{key:{type:'string'},quote:{type:'string',description:'عبارة قصيرة منقولة حرفياً من نص تلك المادة'}},required:['key','quote']}}},required:['answer','keys']};
 const LAW_HINT=[[/جزاي|جنايي|جزايي/,['jazaiya','jazaiyareg']],[/تنفيذ/,['tanfeeth','tanfeethreg']],[/مدني|معاملات/,['madani']],[/مرافعات/,['murafaat']],[/اثبات/,['ithbat','adilla','ithbatelec']],[/تجاري/,['tijariya']],[/توثيق/,['tawtheeq','tawtheeqreg']],[/مرور/,['muroor']]];
 function lawsInText(q){const n=norm(q);let out=[];LAW_HINT.forEach(([re,ids])=>{if(re.test(n))out=out.concat(ids);});return out;}
 async function ask(q){
@@ -433,8 +438,8 @@ async function ask(q){
   if(!navigator.onLine)return done({err:'لا يوجد اتصال بالإنترنت. البحث العادي يعمل بدونه.'});
   try{
     const lawList=S.order.map((id)=>id+' = '+S.laws[id].name).join('\n');
-    const t1=await callClaude('quick','السؤال التالي قد يكون فيه أخطاء إملائية أو كلام عامي، أو وصف لمعنى مادة لا يعرف السائل نصها.\nالأنظمة المتاحة (المعرّف = الاسم):\n'+lawList+'\nالسؤال: «'+q+'»\nحدد الأنظمة التي يتعلق بها السؤال: إن سمّى السائل نظاماً أو مجالاً (كالجزائي أو التنفيذ أو المدني) فاقتصر عليه وعلى لائحته وما يتصل به، وإلا فاختر الأقرب.\nواكتب المصطلحات بلغة ذلك النظام نفسه لا بلغة السائل؛ فالنظام الجزائي مثلاً يقول «المتهم» و«الاعتراف» حيث يقول المدني «المدعى عليه» و«الإقرار»، فاذكر الصيغتين.\nأعد JSON: {"understood":"السؤال بصياغة نظامية فصيحة موجزة","laws":["معرّفات الأنظمة المعنية من القائمة، من 1 إلى 4"],"terms":["10 إلى 16 كلمة أو عبارة قصيرة يُرجح ورودها حرفياً في نص المادة، مع مرادفاتها في النظام المعني"],"article":"رقم مادة إن ذكره السائل صراحة وإلا فارغ"}',600);
-    const p1=parseJSON(t1)||{};const und=String(p1.understood||'');const terms=Array.isArray(p1.terms)?p1.terms.map(String):[];
+    const r1=await callClaude('quick','السؤال التالي قد يكون فيه أخطاء إملائية أو كلام عامي، أو وصف لمعنى مادة لا يعرف السائل نصها.\nالأنظمة المتاحة (المعرّف = الاسم):\n'+lawList+'\nالسؤال: «'+q+'»\nحدد الأنظمة التي يتعلق بها السؤال: إن سمّى السائل نظاماً أو مجالاً (كالجزائي أو التنفيذ أو المدني) فاقتصر عليه وعلى لائحته وما يتصل به، وإلا فاختر الأقرب.\nواكتب المصطلحات بلغة ذلك النظام نفسه لا بلغة السائل؛ فالنظام الجزائي مثلاً يقول «المتهم» و«الاعتراف» حيث يقول المدني «المدعى عليه» و«الإقرار»، فاذكر الصيغتين.',800,SCH1);
+    const p1=r1.data||{};const und=String(p1.understood||'');const terms=Array.isArray(p1.terms)?p1.terms.map(String):[];
     const focus=[...new Set((Array.isArray(p1.laws)?p1.laws.map(String):[]).concat(lawsInText(q)))].filter((id)=>S.laws[id]);
     const syn=[];if(focus.some((id)=>S.laws[id].cat==='jazai')){const nq=norm(q+' '+und);if(/اقر/.test(nq))syn.push('اعتراف','اعترف المتهم بالتهمه');if(/مدعي عليه/.test(nq))syn.push('المتهم');}
     const pool=new Map();const add=(arr,w)=>arr.forEach((a,i)=>{const k=key(a.lawId,a.n);const fw=focus.length&&!focus.includes(a.lawId)?0.35:1;pool.set(k,(pool.get(k)||0)+w*fw*(1-i/80));});
@@ -445,11 +450,14 @@ async function ask(q){
     const cand=[...pool.entries()].sort((a,b)=>b[1]-a[1]).slice(0,30).map((e)=>e[0]);
     if(!cand.length)return done({und,answer:'لم أجد في الأنظمة المحفوظة مادة تتناول هذا.',keys:[]});
     const ctx=cand.map((k)=>{const a=fromKey(k);return '['+k+'] '+S.laws[a.lawId].name+' — المادة ('+label(a)+'):\n'+a.text;}).join('\n\n');
-    const t2=await callClaude(U.model,'أجب عن السؤال من المواد المرفقة وحدها، ولا تذكر نصاً أو حكماً من خارجها، ولا تخترع رقم مادة. انتبه لاختلاف المصطلح بين الأنظمة (الإقرار والاعتراف، المدعى عليه والمتهم). إن لم تجب المواد عن السؤال فقل ذلك صراحة.\nالسؤال: «'+q+'»'+(und?'\nبصياغة نظامية: «'+und+'»':'')+'\n\nالمواد:\n'+ctx+'\n\nأعد JSON فقط: {"answer":"جواب موجز من جملتين إلى أربع جمل يذكر أرقام المواد","keys":["مفاتيح كل المواد التي تتناول السؤال مرتبة بالأهمية، من 1 إلى 6، كما هي بين الأقواس المعقوفة"],"quotes":{"المفتاح":"عبارة قصيرة منقولة حرفياً من نص تلك المادة"}}',1400);
-    const p2=parseJSON(t2);
-    if(!p2||!String(p2.answer||'').trim())return done({err:'وصل جواب غير مكتمل. أعد إرسال السؤال.'});
+    const p2q='أجب عن السؤال من المواد المرفقة وحدها، ولا تذكر نصاً أو حكماً من خارجها، ولا تخترع رقم مادة. انتبه لاختلاف المصطلح بين الأنظمة (الإقرار والاعتراف، المدعى عليه والمتهم). إن لم تجب المواد عن السؤال فقل ذلك صراحة.\nالسؤال: «'+q+'»'+(und?'\nبصياغة نظامية: «'+und+'»':'')+'\n\nالمواد:\n'+ctx+'';
+    let r2=await callClaude(U.model,p2q,2500,SCH2);
+    if(!r2.data||!String(r2.data.answer||'').trim())r2=await callClaude(U.model,p2q,3500,SCH2);
+    const p2=r2.data;
+    if(!p2||!String(p2.answer||'').trim()){if(r2.text.trim())return done({und,answer:r2.text.trim(),keys:cand.slice(0,4),hl:{}});return done({und,err:'تعذر قراءة الجواب'+(r2.stop?' ('+r2.stop+')':'')+'. أعد إرسال السؤال.'});}
     const keys=(Array.isArray(p2.keys)?p2.keys:[]).map(String).filter((k)=>cand.includes(k)).slice(0,6);
-    done({und,answer:String(p2.answer||''),keys,hl:p2.quotes||{}});
+    const hl={};(Array.isArray(p2.quotes)?p2.quotes:[]).forEach((x)=>{if(x&&x.key)hl[String(x.key)]=String(x.quote||'');});if(p2.quotes&&!Array.isArray(p2.quotes)&&typeof p2.quotes==='object')Object.assign(hl,p2.quotes);
+    done({und,answer:String(p2.answer||''),keys,hl});
   }catch(e){done({err:e.message||'تعذر الحصول على جواب.'});}
 }
 
@@ -513,7 +521,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-05h';
+const APP_VER='2026-11-05i';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
