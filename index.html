@@ -345,7 +345,7 @@ function artCard(a){
   const k=key(a.lawId,a.n),on=S.sel===a.n,sv=!!U.saved[k],note=U.notes[k];
   const flags=(a.repealed||a.amended||a.added||a.reg)?'<span class="flags">'+(a.repealed?'<span class="flag r">ملغاة</span>':'')+(a.amended?'<span class="flag">معدّلة</span>':'')+(a.added?'<span class="flag">مضافة</span>':'')+(a.reg?'<span class="flag">لها لائحة</span>':'')+'</span>':'';
   const head='<div class="ah"><span class="num'+(on?'':' soft')+'">'+esc(label(a))+'</span><span class="t">'+(a.title?'<b>'+esc(a.title)+'</b>':'')+'<small>'+esc(a.heading||'')+'</small></span>'+(sv?'<span style="color:var(--gold)">'+IC.star+'</span>':'')+'</div>';
-  const body=head+flags+'<p>'+esc(a.text)+'</p>'+(a.partialText?'<span class="part">المعروض جزء من المادة فقط.</span>':'');
+  const body=head+flags+'<p>'+esc(a.text)+'</p>'+(a.partialText?'<span class="part">المعروض جزء من المادة فقط.</span>':'')+(a.note?'<span class="part">'+esc(a.note)+'</span>':'');
   if(!on)return '<div class="art" data-sel="'+esc(a.n)+'" role="button" tabindex="0" aria-label="المادة '+esc(label(a))+'">'+body+(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':'')+'</div>';
   const inC=U.compare.includes(k);
   return '<div class="art on" id="sel">'+body+(a.reg&&S.regOpen[k]?'<div class="reg"><b>اللائحة التنفيذية</b>'+esc(a.reg)+'</div>':'')+
@@ -428,7 +428,7 @@ async function callClaude(tier,prompt,max,schema){
 }
 const SCH1={type:'object',properties:{understood:{type:'string',description:'السؤال بصياغة نظامية فصيحة موجزة، بالمفهوم الذي قصده السائل نفسه دون أن تضم إليه مفهوماً آخر'},laws:{type:'array',items:{type:'string'},description:'معرّفات الأنظمة المعنية من القائمة، من 1 إلى 4'},terms:{type:'array',items:{type:'string'},description:'10 إلى 16 كلمة أو عبارة قصيرة يُرجح ورودها حرفياً في نص المادة، مع مرادفاتها في النظام المعني'},article:{type:'string',description:'رقم مادة إن ذكره السائل صراحة وإلا فارغ'}},required:['understood','laws','terms']};
 const SCH2={type:'object',properties:{governing:{type:'string',description:'مفتاح المادة الحاكمة للمسألة بعينها كما هو بين الأقواس المعقوفة، أو فارغ إن لم توجد'},verdict:{type:'string',enum:['نعم','لا','فيه تفصيل','لا تجيب المواد'],description:'الحكم المستفاد من المادة الحاكمة'},answer:{type:'string',description:'جواب موجز من جملتين إلى أربع جمل يبدأ بالحكم صريحاً ثم دليله بأرقام المواد'},keys:{type:'array',items:{type:'string'},description:'مفاتيح المواد التي تتناول السؤال، تبدأ بالمادة الحاكمة، من 1 إلى 6، كما هي بين الأقواس المعقوفة'},quotes:{type:'array',items:{type:'object',properties:{key:{type:'string'},quote:{type:'string',description:'عبارة قصيرة منقولة حرفياً من نص تلك المادة'}},required:['key','quote']}}},required:['governing','verdict','answer','keys']};
-const LAW_HINT=[[/جزاي|جنايي|جزايي/,['jazaiya','jazaiyareg']],[/تنفيذ/,['tanfeeth','tanfeethreg']],[/مدني|معاملات/,['madani']],[/مرافعات/,['murafaat']],[/اثبات/,['ithbat','adilla','ithbatelec']],[/تجاري/,['tijariya']],[/توثيق/,['tawtheeq','tawtheeqreg']],[/مرور/,['muroor']]];
+const LAW_HINT=[[/جزاي|جنايي|جزايي/,['jazaiya','jazaiyareg']],[/تنفيذ/,['tanfeeth','tanfeethreg']],[/مدني|معاملات/,['madani']],[/مرافعات/,['murafaat']],[/اثبات/,['ithbat','adilla','ithbatelec']],[/تجاري/,['tijariya']],[/توثيق/,['tawtheeq','tawtheeqreg']],[/مرور/,['muroor','muroortab']]];
 function lawsInText(q){const n=norm(q);let out=[];LAW_HINT.forEach(([re,ids])=>{if(re.test(n))out=out.concat(ids);});return out;}
 async function ask(q){
   q=String(q||'').trim();if(!q||S.busy)return;
@@ -521,7 +521,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-05j';
+const APP_VER='2026-11-05k';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
