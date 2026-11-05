@@ -426,8 +426,8 @@ async function callClaude(tier,prompt,max,schema){
   const text=c.filter((x)=>x.type==='text').map((x)=>x.text).join('');
   return {data:tu?tu.input:parseJSON(text),text,stop:j.stop_reason||''};
 }
-const SCH1={type:'object',properties:{understood:{type:'string',description:'السؤال بصياغة نظامية فصيحة موجزة'},laws:{type:'array',items:{type:'string'},description:'معرّفات الأنظمة المعنية من القائمة، من 1 إلى 4'},terms:{type:'array',items:{type:'string'},description:'10 إلى 16 كلمة أو عبارة قصيرة يُرجح ورودها حرفياً في نص المادة، مع مرادفاتها في النظام المعني'},article:{type:'string',description:'رقم مادة إن ذكره السائل صراحة وإلا فارغ'}},required:['understood','laws','terms']};
-const SCH2={type:'object',properties:{answer:{type:'string',description:'جواب موجز من جملتين إلى أربع جمل يذكر أرقام المواد'},keys:{type:'array',items:{type:'string'},description:'مفاتيح كل المواد التي تتناول السؤال مرتبة بالأهمية، من 1 إلى 6، كما هي بين الأقواس المعقوفة'},quotes:{type:'array',items:{type:'object',properties:{key:{type:'string'},quote:{type:'string',description:'عبارة قصيرة منقولة حرفياً من نص تلك المادة'}},required:['key','quote']}}},required:['answer','keys']};
+const SCH1={type:'object',properties:{understood:{type:'string',description:'السؤال بصياغة نظامية فصيحة موجزة، بالمفهوم الذي قصده السائل نفسه دون أن تضم إليه مفهوماً آخر'},laws:{type:'array',items:{type:'string'},description:'معرّفات الأنظمة المعنية من القائمة، من 1 إلى 4'},terms:{type:'array',items:{type:'string'},description:'10 إلى 16 كلمة أو عبارة قصيرة يُرجح ورودها حرفياً في نص المادة، مع مرادفاتها في النظام المعني'},article:{type:'string',description:'رقم مادة إن ذكره السائل صراحة وإلا فارغ'}},required:['understood','laws','terms']};
+const SCH2={type:'object',properties:{governing:{type:'string',description:'مفتاح المادة الحاكمة للمسألة بعينها كما هو بين الأقواس المعقوفة، أو فارغ إن لم توجد'},verdict:{type:'string',enum:['نعم','لا','فيه تفصيل','لا تجيب المواد'],description:'الحكم المستفاد من المادة الحاكمة'},answer:{type:'string',description:'جواب موجز من جملتين إلى أربع جمل يبدأ بالحكم صريحاً ثم دليله بأرقام المواد'},keys:{type:'array',items:{type:'string'},description:'مفاتيح المواد التي تتناول السؤال، تبدأ بالمادة الحاكمة، من 1 إلى 6، كما هي بين الأقواس المعقوفة'},quotes:{type:'array',items:{type:'object',properties:{key:{type:'string'},quote:{type:'string',description:'عبارة قصيرة منقولة حرفياً من نص تلك المادة'}},required:['key','quote']}}},required:['governing','verdict','answer','keys']};
 const LAW_HINT=[[/جزاي|جنايي|جزايي/,['jazaiya','jazaiyareg']],[/تنفيذ/,['tanfeeth','tanfeethreg']],[/مدني|معاملات/,['madani']],[/مرافعات/,['murafaat']],[/اثبات/,['ithbat','adilla','ithbatelec']],[/تجاري/,['tijariya']],[/توثيق/,['tawtheeq','tawtheeqreg']],[/مرور/,['muroor']]];
 function lawsInText(q){const n=norm(q);let out=[];LAW_HINT.forEach(([re,ids])=>{if(re.test(n))out=out.concat(ids);});return out;}
 async function ask(q){
@@ -450,12 +450,12 @@ async function ask(q){
     const cand=[...pool.entries()].sort((a,b)=>b[1]-a[1]).slice(0,30).map((e)=>e[0]);
     if(!cand.length)return done({und,answer:'لم أجد في الأنظمة المحفوظة مادة تتناول هذا.',keys:[]});
     const ctx=cand.map((k)=>{const a=fromKey(k);return '['+k+'] '+S.laws[a.lawId].name+' — المادة ('+label(a)+'):\n'+a.text;}).join('\n\n');
-    const p2q='أجب عن السؤال من المواد المرفقة وحدها، ولا تذكر نصاً أو حكماً من خارجها، ولا تخترع رقم مادة. انتبه لاختلاف المصطلح بين الأنظمة (الإقرار والاعتراف، المدعى عليه والمتهم). إن لم تجب المواد عن السؤال فقل ذلك صراحة.\nالسؤال: «'+q+'»'+(und?'\nبصياغة نظامية: «'+und+'»':'')+'\n\nالمواد:\n'+ctx+'';
+    const p2q='أجب عن السؤال من المواد المرفقة وحدها، ولا تذكر نصاً أو حكماً من خارجها، ولا تخترع رقم مادة. انتبه لاختلاف المصطلح بين الأنظمة (الإقرار والاعتراف، المدعى عليه والمتهم). إن لم تجب المواد عن السؤال فقل ذلك صراحة.\nقواعد الجواب:\n١- أجب عن المفهوم الذي سأل عنه السائل بعينه، ولا تخلط بينه وبين مفهوم قريب منه (كالظروف الاستثنائية والقوة القاهرة، أو الإقرار والاعتراف، أو الفسخ والانفساخ). فإن وُجدت مادة في مفهوم قريب فاذكرها بعد الحكم للتمييز فقط.\n٢- حدد أولاً المادة الحاكمة للمسألة بعينها، ثم الحكم، ثم اكتب الجواب.\n٣- ابدأ الجواب بالحكم صريحاً (نعم، أو لا، أو فيه تفصيل) مطابقاً للحكم الذي حددته، ثم دليله، ولا يناقض آخرُ الجواب أوله.\n٤- النص العام في المواد يحكم المسألة وإن لم يذكرها باسمها، فلا تقل إن المواد لم تتناولها وهو يشملها.\nالسؤال: «'+q+'»'+(und?'\nبصياغة نظامية: «'+und+'»':'')+'\n\nالمواد:\n'+ctx+'';
     let r2=await callClaude(U.model,p2q,2500,SCH2);
     if(!r2.data||!String(r2.data.answer||'').trim())r2=await callClaude(U.model,p2q,3500,SCH2);
     const p2=r2.data;
     if(!p2||!String(p2.answer||'').trim()){if(r2.text.trim())return done({und,answer:r2.text.trim(),keys:cand.slice(0,4),hl:{}});return done({und,err:'تعذر قراءة الجواب'+(r2.stop?' ('+r2.stop+')':'')+'. أعد إرسال السؤال.'});}
-    const keys=(Array.isArray(p2.keys)?p2.keys:[]).map(String).filter((k)=>cand.includes(k)).slice(0,6);
+    const keys=[...new Set([String(p2.governing||'')].concat(Array.isArray(p2.keys)?p2.keys.map(String):[]))].filter((k)=>cand.includes(k)).slice(0,6);
     const hl={};(Array.isArray(p2.quotes)?p2.quotes:[]).forEach((x)=>{if(x&&x.key)hl[String(x.key)]=String(x.quote||'');});if(p2.quotes&&!Array.isArray(p2.quotes)&&typeof p2.quotes==='object')Object.assign(hl,p2.quotes);
     done({und,answer:String(p2.answer||''),keys,hl});
   }catch(e){done({err:e.message||'تعذر الحصول على جواب.'});}
@@ -521,7 +521,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-05i';
+const APP_VER='2026-11-05j';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
