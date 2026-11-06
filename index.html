@@ -248,6 +248,9 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
 .cpbt{display:flex;justify-content:space-between;align-items:baseline}.cpbt b{font-size:22px;color:var(--gold-ink);font-variant-numeric:tabular-nums}.cpbt span{font-size:13px;color:var(--mut)}
 .cpbb{height:10px;border-radius:6px;background:var(--field);overflow:hidden}.cpbb i{display:block;height:100%;background:var(--gold);border-radius:6px;transition:width .9s linear}
 .cpbar small{font-size:12px;color:var(--mut);line-height:1.6}
+.cwr{font-size:11.5px;color:var(--gold-ink);font-weight:600;margin-inline-start:auto}
+.cbad{font-size:12.5px;color:var(--danger);line-height:1.7;margin-top:6px}
+.note.ok{background:var(--ok-soft);border-color:transparent}.note.ok b{color:var(--ok)}
 </style>
 </head>
 <body>
@@ -524,77 +527,103 @@ function centerIn(id,sel){const box=$(id);if(!box)return;const el=box.querySelec
 
 /* ---------- مقارنة نظامين ---------- */
 const CM=ls('anz_cmp')||{};
-Object.values(CM).forEach((r)=>{delete r.running;(r.chat||[]).forEach((m)=>{if(m.wait){delete m.wait;m.err='انقطع قبل أن يكتمل';}});});
-function saveCM(){try{localStorage.setItem('anz_cmp',JSON.stringify(CM));}catch(e){toast('تعذر حفظ التقرير في ذاكرة الجهاز');}}
-S.cmpSeg=S.cmpSeg||'laws';S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;S.cmpOpen={};S.cmpDiff={};S.cmpRun=null;S.cmpAsking=false;
+Object.keys(CM).forEach((k)=>{const r=CM[k];if(r.sections&&!r.specs){delete r.sections;delete r.errs;delete r.map;}delete r.running;Object.values(r.secs||{}).forEach((s)=>{if(s.state==='run'){s.state=s.text?'cut':'err';s.err=s.err||'انقطع قبل أن يكتمل';delete s.t;}});(r.chat||[]).forEach((m)=>{if(m.wait){delete m.wait;if(!m.a)m.err='انقطع قبل أن يكتمل';}});});
+let cmSaveT=0;
+function saveCM(now){clearTimeout(cmSaveT);const w=()=>{try{localStorage.setItem('anz_cmp',JSON.stringify(CM));}catch(e){toast('تعذر حفظ التقرير في ذاكرة الجهاز');}};if(now)w();else cmSaveT=setTimeout(w,1500);}
+S.cmpSeg=S.cmpSeg||'laws';S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;S.cmpOpen={};S.cmpDiff={};S.cmpRun=null;S.cmpAsking=false;S.cmpTest=null;
 function cmpCfg(){
   const c=U.cmpCfg;if(c&&S.laws[c.oLaw]&&S.laws[c.nLaw])return c;
   const o=S.laws.tanfeethold?'tanfeethold':S.order[0],n=S.laws.tanfeeth?'tanfeeth':S.order[1];
   U.cmpCfg={oLaw:o,oReg:CMP.defaultReg(S.laws,S.arts,o),nLaw:n,nReg:CMP.defaultReg(S.laws,S.arts,n)};return U.cmpCfg;
 }
 let cmpMemo={k:'',v:null};
-function getCmp(cfg){const k=CMP.key(cfg)+'|'+(S.laws[cfg.oLaw]||{}).name;if(cmpMemo.k!==k){cmpMemo={k,v:CMP.compare(S.laws,S.arts,cfg)};S.cmpDiff={};}return cmpMemo.v;}
+function getCmp(cfg){const k=CMP.key(cfg)+'|'+(S.arts[cfg.oLaw]||[]).length+'|'+(S.arts[cfg.nLaw]||[]).length;if(cmpMemo.k!==k){cmpMemo={k,v:CMP.compare(S.laws,S.arts,cfg)};S.cmpDiff={};}return cmpMemo.v;}
 const shortName=(id)=>{const L=S.laws[id];return L?L.name.replace(/^نظام\s+/,'').replace(/\s*—\s*ملغى/,''):'';};
+// طلب الذكي مع استلام النص وهو يُكتب
 async function cmpCall(p){
-  const body={model:p.tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:p.max||4000,system:p.system,messages:p.messages};
-  if(p.tools){body.tools=p.tools;body.tool_choice=p.tool_choice;}
+  const body={model:p.tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:p.max||4000,system:p.system,messages:p.messages,stream:true};
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':U.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
-  const j=await r.json().catch(()=>({}));
-  if(!r.ok){const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الطلبات، انتظر دقيقة ثم أعد المحاولة.':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'تعذر الحصول على جواب ('+r.status+(msg?': '+msg.slice(0,80):'')+').');}
-  const c=j.content||[];const tu=c.find((x)=>x.type==='tool_use');
-  return {data:tu?tu.input:null,text:c.filter((x)=>x.type==='text').map((x)=>x.text).join(''),stop:j.stop_reason||''};
+  if(!r.ok){const j=await r.json().catch(()=>({}));const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الطلبات، انتظر دقيقة ثم أعد المحاولة ('+msg.slice(0,120)+')':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'رفض الخادم الطلب ('+r.status+(msg?': '+msg.slice(0,160):'')+')');}
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='',text='',stop='',usage=null;
+  for(;;){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+    while((i=buf.indexOf('\n\n'))>=0){const ev=buf.slice(0,i);buf=buf.slice(i+2);const dl=ev.split('\n').filter((l)=>l.startsWith('data:')).map((l)=>l.slice(5).trim()).join('');if(!dl)continue;let j;try{j=JSON.parse(dl);}catch(e){continue;}
+      if(j.type==='content_block_delta'&&j.delta&&j.delta.type==='text_delta'){text+=j.delta.text;if(p.onText)p.onText(text);}
+      else if(j.type==='message_delta'){if(j.delta&&j.delta.stop_reason)stop=j.delta.stop_reason;if(j.usage)usage=j.usage;}
+      else if(j.type==='error')throw new Error('انقطع الرد من الخادم: '+((j.error&&j.error.message)||''));}}
+  return {text,stop,usage};
 }
+let cmpDrawT=0;
+function cmpDraw(force){if(force||Date.now()-cmpDrawT>700){cmpDrawT=Date.now();if(S.view==='cmpr')render();}else cmpTick();}
 async function cmpGenerate(){
   if(S.cmpRun)return;
   if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
   if(!navigator.onLine){toast('لا يوجد اتصال بالإنترنت');return;}
   const cfg=Object.assign({},cmpCfg()),k=CMP.key(cfg),cmp=getCmp(cfg),ctx=CMP.doc(S.laws,cfg,cmp);
-  const old=CM[k];const rep={cfg,at:Date.now(),sections:[],chat:old&&old.chat||[],running:true};CM[k]=rep;S.cmpRun={k,done:0};render();
-  cmpTick(true);
-  try{const r=await CMP.report(cfg,ctx,cmpCall,(p)=>{CMP.mergeSections(rep,p);S.cmpRun.done++;saveCM();if(S.view==='cmpr')render();},cmp,(pg)=>{S.cmpRun.pg=pg;cmpTick();});rep.errs=r.errs;}
-  catch(e){rep.errs=[e.message||String(e)];}
-  delete rep.running;S.cmpRun=null;saveCM();render();
-  toast(!rep.sections.length?'تعذر إنشاء التقرير، والسبب مكتوب في الصفحة':rep.errs&&rep.errs.length?'اكتمل التقرير مع نقص في بعض الأقسام':'اكتمل التقرير الشامل');
+  const old=CM[k];const rep={cfg,at:Date.now(),secs:{},chat:old&&old.chat||[],running:true};CM[k]=rep;S.cmpRun={k};cmpTick(true);render();
+  try{await CMP.report(rep,ctx,cmpCall,cmp,(f)=>{saveCM();cmpDraw(f);});}catch(e){rep.fail=String(e&&e.message||e);}
+  delete rep.running;S.cmpRun=null;saveCM(true);render();
+  const bad=Object.values(rep.secs||{}).filter((s)=>s.state!=='ok').length;
+  toast(rep.fail?'تعذر إنشاء التقرير، والسبب مكتوب في الصفحة':bad?'اكتمل التقرير، وفيه '+CMP.ar(bad)+' أجزاء ناقصة تقدر تعيدها':'اكتمل التقرير الشامل');
+}
+async function cmpRetry(key){
+  const cfg=cmpCfg(),k=CMP.key(cfg),rep=CM[k];if(!rep||S.cmpRun)return;
+  if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
+  const cmp=getCmp(cfg);rep.running=true;S.cmpRun={k};cmpTick(true);render();
+  await CMP.retry(rep,key,CMP.doc(S.laws,cfg,cmp),cmpCall,cmp,(f)=>{saveCM();cmpDraw(f);});
+  delete rep.running;S.cmpRun=null;saveCM(true);render();
+}
+async function cmpQuick(){
+  if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
+  S.cmpTest={busy:true};render();
+  try{S.cmpTest={res:await CMP.quickTest(S.laws,S.arts,cmpCfg(),cmpCall)};}catch(e){S.cmpTest={err:String(e&&e.message||e)};}
+  render();
+}
+async function cmpDocx(){
+  const cfg=cmpCfg(),rep=CM[CMP.key(cfg)];if(!rep)return;
+  const bytes=CMP.docx(rep,cfg,S.laws,cmpRows(cfg));const name='مقارنة '+shortName(cfg.oLaw)+' و'+shortName(cfg.nLaw)+'.docx';
+  const file=new File([bytes],name,{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
 }
 let cmpTimer=null;
 // شريط التقدم: يُحدَّث كل ثانية دون إعادة رسم الصفحة
 function cmpTick(start){
   if(start){clearInterval(cmpTimer);cmpTimer=setInterval(()=>{if(!S.cmpRun){clearInterval(cmpTimer);cmpTimer=null;return;}cmpTick();},1000);}
-  const g=S.cmpRun&&S.cmpRun.pg;const pc=g?CMP.percent(g):1;
-  const a=document.getElementById('cpi'),b=document.getElementById('cpp'),c=document.getElementById('cpr'),d=document.getElementById('cpn'),e=document.getElementById('cps');
-  if(a)a.style.width=pc+'%';if(b)b.textContent=CMP.ar(pc)+'٪';if(c)c.textContent=g?remTxt(g):'يبدأ…';
-  if(d&&g)d.textContent='اكتمل '+CMP.ar(g.done)+' من '+CMP.ar(g.total)+' أجزاء';if(e)e.textContent=' · '+CMP.ar(pc)+'٪';
+  const rep=S.cmpRun&&CM[S.cmpRun.k];const g=CMP.progress(rep);
+  const set=(id,v,attr)=>{const el=document.getElementById(id);if(el){if(attr)el.style.width=v;else el.textContent=v;}};
+  set('cpi',g.pc+'%',1);set('cpp',CMP.ar(g.pc)+'٪');set('cpr',g.rem||'');set('cpn',cmpProgLine(g));set('cps',' · '+CMP.ar(g.pc)+'٪');
 }
-function remTxt(g){const r=CMP.remaining(g);return /^يقدّر/.test(r)?r:'باقي '+r;}
-function cmpBar(){const g=S.cmpRun&&S.cmpRun.pg;const pc=g?CMP.percent(g):1;
-  return '<div class="cpbar"><div class="cpbt"><b id="cpp">'+CMP.ar(pc)+'٪</b><span id="cpr">'+(g?remTxt(g):'يبدأ…')+'</span></div><div class="cpbb"><i id="cpi" style="width:'+pc+'%"></i></div><small><span id="cpn">'+(g?'اكتمل '+CMP.ar(g.done)+' من '+CMP.ar(g.total)+' أجزاء':'يقرأ النظامين ولائحتيهما')+'</span> · الأقسام تظهر تحت أولاً بأول، وخلّ التطبيق مفتوحاً</small></div>';}
+function cmpProgLine(g){return g.total>1?'اكتمل '+CMP.ar(g.done)+' من '+CMP.ar(g.total)+' أجزاء'+(g.writing&&g.writing.length?' · يكتب الآن: '+g.writing.slice(0,2).join('، '):''):'يقرأ النظامين ولائحتيهما…';}
+function cmpBar(rep){const g=CMP.progress(rep);
+  return '<div class="cpbar"><div class="cpbt"><b id="cpp">'+CMP.ar(g.pc)+'٪</b><span id="cpr">'+esc(g.rem)+'</span></div><div class="cpbb"><i id="cpi" style="width:'+g.pc+'%"></i></div><small><span id="cpn">'+esc(cmpProgLine(g))+'</span><br>الأقسام تظهر تحت وهي تُكتب، وخلّ التطبيق مفتوحاً والشاشة شغالة</small></div>';}
 async function cmpAsk(q){
   q=String(q||'').trim();if(!q||S.cmpAsking)return;
   if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
-  const cfg=cmpCfg(),k=CMP.key(cfg);const rep=CM[k]||(CM[k]={cfg,sections:[],chat:[]});rep.chat=rep.chat||[];
+  const cfg=cmpCfg(),k=CMP.key(cfg);const rep=CM[k]||(CM[k]={cfg,secs:{},chat:[]});rep.chat=rep.chat||[];
   const item={q,wait:true};rep.chat.push(item);S.cmpAsking=true;render();
-  try{item.a=await CMP.ask(CMP.doc(S.laws,cfg,getCmp(cfg)),rep.chat.filter((x)=>x.a),q,cmpCall);}catch(e){item.err=e.message||String(e);}
-  delete item.wait;S.cmpAsking=false;saveCM();render();
+  try{item.a=await CMP.ask(CMP.doc(S.laws,cfg,getCmp(cfg)),rep.chat.filter((x)=>x.a&&!x.wait),q,cmpCall,(t)=>{item.a=t;cmpDraw();});}catch(e){item.err=String(e&&e.message||e);if(!item.a)delete item.a;}
+  delete item.wait;S.cmpAsking=false;saveCM(true);render();
 }
 function lawSel(id,val){return '<select class="csel" id="'+id+'">'+S.order.map((x)=>'<option value="'+x+'"'+(x===val?' selected':'')+'>'+esc(S.laws[x].name)+'</option>').join('')+'</select>';}
 function regSel(id,lawId,val){const o=CMP.regOptions(S.laws,S.arts,lawId);return '<select class="csel" id="'+id+'"><option value="">بدون لائحة</option>'+o.map((x)=>'<option value="'+x.v+'"'+(x.v===val?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>';}
+const hasRep=(r)=>r&&r.specs&&r.specs.length>1;
 function vCmpLaws(){
   const c=cmpCfg();const n=(id)=>(S.arts[id]||[]).length;
-  const saved=Object.values(CM).filter((r)=>r.cfg&&r.sections&&r.sections.length&&S.laws[r.cfg.oLaw]&&S.laws[r.cfg.nLaw]).sort((a,b)=>(b.at||0)-(a.at||0));
-  return '<div class="fl">الأول (القديم)</div><div class="card cpick"><label>النظام<small>'+n(c.oLaw)+' مادة</small>'+lawSel('coLaw',c.oLaw)+'</label><label>لائحته'+regSel('coReg',c.oLaw,c.oReg)+'</label></div>'+
+  const saved=Object.values(CM).filter((r)=>hasRep(r)&&r.cfg&&S.laws[r.cfg.oLaw]&&S.laws[r.cfg.nLaw]).sort((a,b)=>(b.at||0)-(a.at||0));
+  return '<div class="fl">الأول (القديم)</div><div class="card cpick"><label>النظام'+lawSel('coLaw',c.oLaw)+'</label><label>لائحته'+regSel('coReg',c.oLaw,c.oReg)+'</label></div>'+
    '<div class="cvs">⇅ مقابل</div>'+
-   '<div class="fl">الثاني (الجديد)</div><div class="card cpick"><label>النظام<small>'+n(c.nLaw)+' مادة</small>'+lawSel('cnLaw',c.nLaw)+'</label><label>لائحته'+regSel('cnReg',c.nLaw,c.nReg)+'</label></div>'+
+   '<div class="fl">الثاني (الجديد)</div><div class="card cpick"><label>النظام'+lawSel('cnLaw',c.nLaw)+'</label><label>لائحته'+regSel('cnReg',c.nLaw,c.nReg)+'</label></div>'+
    '<button class="btn gold big" data-act="cmpGo"'+(c.oLaw===c.nLaw?' disabled':'')+'>قارن</button>'+
    '<p class="hint">المقارنة مادة مادة تظهر فوراً وبلا إنترنت. والتقرير الشامل يكتبه الذكي مرة واحدة من المفتاح ويُحفظ، ثم تسأله ما شئت عن الفروق.</p>'+
    (saved.length?'<div class="fl">مقارنات محفوظة</div><div class="card">'+saved.map((r)=>'<button class="row" data-cload="'+esc(CMP.key(r.cfg))+'"><span class="t"><b>'+esc(shortName(r.cfg.oLaw)+' ↔ '+shortName(r.cfg.nLaw))+'</b><small>تقرير محفوظ · '+new Date(r.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long'})+'</small></span></button>').join('')+'</div>':'');
 }
-function stTag(st){return {mod:'<span class="ctag mod">معدّلة</span>',del:'<span class="ctag del">لا مقابل لها</span>',new:'<span class="ctag new">جديدة</span>',same:'<span class="ctag same">كما هي</span>'}[st];}
+function stTag(r){if(r.miss)return '<span class="ctag same">لم تُطابَق</span>';return {mod:'<span class="ctag mod">معدّلة</span>',del:'<span class="ctag del">لا مقابل لها</span>',new:'<span class="ctag new">جديدة</span>',same:'<span class="ctag same">كما هي</span>'}[r.st];}
 function cmpRows(cfg){const cmp=getCmp(cfg);const rep=CM[CMP.key(cfg)];const ai=rep&&rep.map?CMP.aiRows(cmp,rep.map):null;return ai||cmp;}
 function vCmpR(){
   const cfg=cmpCfg(),k=CMP.key(cfg),rep=CM[k];
   top.className='';top.innerHTML=topBar(shortName(cfg.oLaw)+' ↔ '+shortName(cfg.nLaw),'مقارنة بين نظامين');
-  const R=cmpRows(cfg);
-  const seg='<div class="seg">'+[['rep','التقرير'],['arts','مادة مادة'],['ask','اسأل']].map((x)=>'<button data-ctab="'+x[0]+'" aria-pressed="'+(S.cmpTab===x[0])+'">'+x[1]+(x[0]==='rep'&&S.cmpRun?'<span id="cps"> · '+CMP.ar(CMP.percent(S.cmpRun.pg))+'٪</span>':'')+'</button>').join('')+'</div>';
+  const R=cmpRows(cfg);const running=S.cmpRun&&S.cmpRun.k===k;
+  const seg='<div class="seg">'+[['rep','التقرير'],['arts','مادة مادة'],['ask','اسأل']].map((x)=>'<button data-ctab="'+x[0]+'" aria-pressed="'+(S.cmpTab===x[0])+'">'+x[1]+(x[0]==='rep'&&running?'<span id="cps"> · '+CMP.ar(CMP.progress(rep).pc)+'٪</span>':'')+'</button>').join('')+'</div>';
   const c=R.c.all;
   const stats='<div class="cstats">'+[['mod','معدّلة'],['del','لا مقابل لها'],['new','جديدة'],['same','كما هي']].map((x)=>'<button class="cst" data-cst="'+x[0]+'"><b>'+CMP.ar(c[x[0]])+'</b><span>'+x[1]+'</span></button>').join('')+'</div>';
   let body='';
@@ -603,41 +632,42 @@ function vCmpR(){
   else body=vCmpAsk(cfg,rep);
   return '<div class="wrap">'+seg+body+'</div>';
 }
-function ptHtml(p,cfg,showFav){
-  const refs=(p.refs||[]).filter((r)=>String(p.text).indexOf(r)<0);
-  return '<div class="cpt"><div>'+CMP.refsHTML(p.text,cfg)+'</div>'+((refs.length||(showFav&&p.favors))?'<div class="crefs">'+(showFav&&p.favors?'<span class="ctag fav">'+esc(p.favors)+'</span>':'')+refs.map((r)=>CMP.refsHTML(r,cfg)).join('')+'</div>':'')+'</div>';
-}
+function ptHtml(p,cfg){return '<div class="cpt">'+(p.favors?'<span class="ctag fav">'+esc(p.favors==='متوازن'?'متوازن':'لصالح '+p.favors)+'</span> ':'')+CMP.refsHTML(p.text,cfg)+'</div>';}
 function vCmpRep(cfg,rep){
   const running=S.cmpRun&&S.cmpRun.k===CMP.key(cfg);
-  const secs=rep&&rep.sections?CMP.order(rep):[];
-  if(!secs.length&&!running){
-    const est=CMP.estimate(CMP.doc(S.laws,cfg,getCmp(cfg)));
-    return '<div class="card cintro"><b>التقرير الشامل</b><p>يقرأ الذكي (Sonnet) النظامين ولائحتيهما كاملة، ثم يكتب: الخلاصة، وما استُجد وما حُذف وما تغيّر، والمدد، وموضوعات النظامين موضوعاً موضوعاً، وميزان الأطراف، والسريان، ومسائل ينتبه لها القاضي، مع رقم كل مادة في الطرفين. ويطابق المواد مطابقة دقيقة في «مادة مادة».</p><small>يُكتب مرة واحدة ويُحفظ · التكلفة التقريبية '+est.usd.toFixed(1)+' دولار · يستغرق بضع دقائق، والتطبيق مفتوح</small>'+
-     (rep&&rep.errs&&rep.errs.length?'<div class="note"><b>تعذر إنشاء التقرير في المحاولة السابقة:</b> <span class="err" style="unicode-bidi:plaintext">'+esc(rep.errs[0])+'</span></div>':'')+
-     (U.key?'<button class="btn gold big" data-act="cmpGen">أنشئ التقرير الشامل</button>':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+'</div>';
+  if(!hasRep(rep)&&!running){
+    const est=CMP.estimate(CMP.doc(S.laws,cfg,getCmp(cfg)));const t=S.cmpTest;
+    const test=!t?'':t.busy?'<div class="note">يجرّب… <span class="dots"><i></i><i></i><i></i></span></div>':t.err?'<div class="note"><b>التجربة لم تنجح:</b> <span class="err" style="unicode-bidi:plaintext">'+esc(t.err)+'</span></div>':
+      '<div class="note ok"><b>'+(t.res.ok?'الطريقة سليمة ✓':'وصل رد لكن بشكل غير متوقع')+'</b> — وصل الرد في '+CMP.ar(Math.round(t.res.secs))+' ثانية'+(t.res.streamed?' وهو يُكتب أولاً بأول':'')+'، وقُرئت منه '+CMP.ar(t.res.points)+' نقاط. مثال: «'+esc(t.res.sample.slice(0,140))+'»</div>';
+    return '<div class="card cintro"><b>التقرير الشامل</b><p>يقرأ الذكي (Sonnet 5.5) النظامين ولائحتيهما كاملة، ثم يكتب كل قسم على حدة: الخلاصة، وما استُجد وما حُذف وما تغيّر، والمدد، وموضوعات النظامين موضوعاً موضوعاً، وميزان الأطراف، والسريان، ومسائل ينتبه لها القاضي، مع رقم كل مادة في الطرفين. ويطابق المواد مطابقة دقيقة في «مادة مادة».</p><small>يُكتب مرة واحدة ويُحفظ · التكلفة التقريبية '+est.usd.toFixed(1)+' دولار · نحو ٨–١٢ دقيقة، والأقسام تظهر وهي تُكتب</small>'+
+     (rep&&rep.fail?'<div class="note"><b>تعذر إنشاء التقرير في المحاولة السابقة:</b> <span class="err" style="unicode-bidi:plaintext">'+esc(rep.fail)+'</span></div>':'')+test+
+     (U.key?'<div class="btns"><button class="btn gold big" data-act="cmpGen">أنشئ التقرير الشامل</button><button class="btn" data-act="cmpQuick"'+(t&&t.busy?' disabled':'')+'>تجربة سريعة (أقل من سنت)</button></div>':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+'</div>';
   }
-  const par=rep&&rep.parties||[];
+  const secs=CMP.sections(rep).filter((s)=>s.state!=='wait');
   const out=secs.map((s)=>{
-    const pts=s.points||[];let extra='';
-    if(s.key==='balance'&&par.length===2){const a=pts.filter((p)=>p.favors===par[0]).length,b=pts.filter((p)=>p.favors===par[1]).length,m=pts.length-a-b,t=Math.max(1,a+b+m);
+    const pts=s.points;let extra='';const par=rep.parties||[];
+    if(s.key==='balance'&&par.length===2&&pts.length){const a=pts.filter((p)=>p.favors===par[0]).length,b=pts.filter((p)=>p.favors===par[1]).length,m=pts.filter((p)=>p.favors==='متوازن').length,t=Math.max(1,a+b+m);
       extra='<div class="cbal"><i style="width:'+(a/t*100)+'%;background:var(--navy)"></i><i style="width:'+(m/t*100)+'%;background:var(--line)"></i><i style="width:'+(b/t*100)+'%;background:var(--gold)"></i></div><div class="cbl"><span>لصالح '+esc(par[0])+' · '+CMP.ar(a)+'</span><span>متوازن · '+CMP.ar(m)+'</span><span>لصالح '+esc(par[1])+' · '+CMP.ar(b)+'</span></div>';}
-    const cnt=(s.key==='added'||s.key==='removed')?' <span class="ctag '+(s.key==='added'?'new':'del')+'">'+CMP.ar(pts.length)+'</span>':'';
-    return '<div class="csec"><h3>'+esc(s.title)+cnt+'</h3>'+extra+pts.map((p)=>ptHtml(p,cfg,s.key==='balance')).join('')+'</div>';
+    const cnt=(s.key==='added'||s.key==='removed')&&s.state==='ok'?' <span class="ctag '+(s.key==='added'?'new':'del')+'">'+CMP.ar(pts.length)+'</span>':'';
+    const st=s.state==='run'?'<span class="cwr">يكتب <span class="dots"><i></i><i></i><i></i></span></span>':'';
+    const bad=s.state==='cut'||s.state==='err'?'<div class="cbad">'+(s.state==='cut'?'انقطع قبل أن يكتمل، والمعروض ما كُتب منه.':'تعذر هذا القسم.')+(s.err?' <span style="unicode-bidi:plaintext">('+esc(s.err.slice(0,160))+')</span>':'')+(running?'':' <button class="link" data-cretry="'+s.key+'">أعد هذا القسم</button>')+'</div>':'';
+    return '<div class="csec"><h3>'+esc(s.title)+cnt+st+'</h3>'+extra+pts.map((p)=>ptHtml(p,cfg)).join('')+bad+'</div>';
   }).join('');
-  const foot=running?'':
-    '<div class="cfoot">'+(rep.errs&&rep.errs.length?'<span class="err">لم يكتمل بعض الأقسام ('+esc(rep.errs[0])+').</span>':'<span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet</span>')+'<button class="link" data-act="cmpGen">إعادة الإنشاء</button></div>';
-  return (running?cmpBar():'')+(out?'<div class="card">'+out+'</div>':'')+foot;
+  const maps=(rep.specs||[]).filter((sp)=>sp.kind==='map'||sp.kind==='removed');const mbad=maps.filter((sp)=>rep.secs[sp.key]&&/err|cut/.test(rep.secs[sp.key].state));
+  const mapNote=!running&&mbad.length?'<div class="cbad">'+CMP.ar(mbad.length)+' من أجزاء مطابقة المواد لم تكتمل، فبعض المواد في «مادة مادة» بلا مطابقة. '+mbad.map((sp)=>'<button class="link" data-cretry="'+sp.key+'">أعد «'+esc(sp.title)+'»</button>').join(' ')+'</div>':'';
+  const foot=running?'':'<div class="cfoot"><span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet 5.5</span><span><button class="link" data-act="cmpDocx">ملف Word</button> · <button class="link" data-act="cmpGen">إعادة الإنشاء</button></span></div>';
+  return (running?cmpBar(rep):'')+(out?'<div class="card">'+out+'</div>':'')+mapNote+foot;
 }
 function rowHtml(r,i,cfg){
   const id=S.cmpScope+':'+i;const open=S.cmpOpen[id];
   const os=r.os||(r.o?[r.o]:[]);
   const head=(os.length?os.map((o)=>CMP.refsHTML(o.ref,cfg)).join(''):'')+(r.n&&os.length?'<span class="carr">←</span>':'')+(r.n?CMP.refsHTML(r.n.ref,cfg):'');
   let txt;
-  if(r.st==='mod'){const dk=id+'|'+(r.n&&r.n.ref);if(!S.cmpDiff[dk])S.cmpDiff[dk]=CMP.diffHTML(os.map((o)=>o.text).join('\n'),r.n.text);txt=S.cmpDiff[dk];}
+  if(r.st==='mod'){const dk=id+'|'+(r.n&&r.n.ref)+'|'+os.map((o)=>o.ref).join();if(!S.cmpDiff[dk])S.cmpDiff[dk]=CMP.diffHTML(os.map((o)=>o.text).join('\n'),r.n.text);txt=S.cmpDiff[dk];}
   else txt=esc((r.n||r.o).text);
   const near=!r.note&&r.near?'<div class="cnote">أقرب مادة في '+(r.st==='del'?'الجديد':'القديم')+': '+CMP.refsHTML(r.near.ref,cfg)+'</div>':'';
   const moved=r.moved?'<span class="ctag mv">'+(r.n&&r.n.kind==='reg'?'من النظام إلى اللائحة':'بين النظام واللائحة')+'</span>':'';
-  return '<div class="crow"><div class="crh"><span class="crr">'+head+'</span>'+moved+stTag(r.st)+'</div>'+(r.note?'<div class="cnote">'+CMP.refsHTML(r.note,cfg)+'</div>':'')+near+
+  return '<div class="crow"><div class="crh"><span class="crr">'+head+'</span>'+moved+stTag(r)+'</div>'+(r.note?'<div class="cnote">'+CMP.refsHTML(r.note,cfg)+'</div>':'')+near+
    '<button class="ctx'+(open?' open':'')+'" data-cx="'+esc(id)+'">'+txt+'</button></div>';
 }
 function vCmpArts2(cfg,R){
@@ -654,14 +684,14 @@ function vCmpAsk(cfg,rep){
   const chat=rep&&rep.chat||[];
   return '<form class="askbox" id="cqf"><textarea id="cq" rows="1" placeholder="مثال: هل صار حبس المدين أصعب في النظام الجديد؟" aria-label="سؤالك عن الفروق"></textarea><button class="send" aria-label="إرسال"'+(S.cmpAsking?' disabled':'')+'>'+IC.send+'</button></form>'+
    (U.key?'':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+
-   (chat.length?'':'<div class="empty">اسأل أي سؤال عن الفروق بين النظامين، والنظامان ولائحتاهما كاملة أمام الذكي في كل سؤال. أول سؤال أغلى قليلاً، وما بعده خلال الساعة أرخص بكثير.</div>')+
-   chat.slice().reverse().map((m)=>'<div class="qa"><div class="bub">'+esc(m.q)+'</div><div class="ans">'+(m.wait?'<span class="und">يقرأ النظامين <span class="dots"><i></i><i></i><i></i></span></span>':m.err?'<span class="err">'+esc(m.err)+'</span>':'<span class="cans">'+CMP.refsHTML(m.a,cfg)+'</span>')+'</div></div>').join('')+
+   (chat.length?'':'<div class="empty">اسأل أي سؤال عن الفروق بين النظامين، والنظامان ولائحتاهما كاملة أمام الذكي في كل سؤال، والجواب يظهر وهو يُكتب.</div>')+
+   chat.slice().reverse().map((m)=>'<div class="qa"><div class="bub">'+esc(m.q)+'</div><div class="ans">'+(m.wait&&!m.a?'<span class="und">يقرأ النظامين <span class="dots"><i></i><i></i><i></i></span></span>':'')+(m.a?'<span class="cans">'+CMP.refsHTML(m.a,cfg)+'</span>':'')+(m.err?'<span class="err" style="unicode-bidi:plaintext">'+esc(m.err)+'</span>':'')+'</div></div>').join('')+
    (chat.length?'<button class="link" data-act="cmpClearChat">مسح المحادثة</button>':'');
 }
 function cmpPick(){
   const g=(id)=>{const el=$(id);return el?el.value:'';};const c=cmpCfg();
   const oLaw=g('coLaw')||c.oLaw,nLaw=g('cnLaw')||c.nLaw;
-  U.cmpCfg={oLaw,nLaw,oReg:oLaw!==c.oLaw?CMP.defaultReg(S.laws,S.arts,oLaw):g('coReg'),nReg:nLaw!==c.nLaw?CMP.defaultReg(S.laws,S.arts,nLaw):g('cnReg')};saveU();render();
+  U.cmpCfg={oLaw,nLaw,oReg:oLaw!==c.oLaw?CMP.defaultReg(S.laws,S.arts,oLaw):g('coReg'),nReg:nLaw!==c.nLaw?CMP.defaultReg(S.laws,S.arts,nLaw):g('cnReg')};S.cmpTest=null;saveU();render();
 }
 document.addEventListener('change',(e)=>{if(['coLaw','coReg','cnLaw','cnReg'].includes(e.target.id))cmpPick();});
 document.addEventListener('click',(e)=>{
@@ -674,11 +704,14 @@ document.addEventListener('click',(e)=>{
   if(d.cst){S.cmpTab='arts';S.cmpSt=d.cst;S.cmpLimit=40;render(true);return;}
   if(d.cx){S.cmpOpen[d.cx]=!S.cmpOpen[d.cx];render();return;}
   if(d.cref){const i=d.cref.indexOf('|');openArticle(d.cref.slice(0,i),d.cref.slice(i+1));return;}
+  if(d.cretry){cmpRetry(d.cretry);return;}
   if(d.cload){const r=CM[d.cload];if(r){U.cmpCfg=Object.assign({},r.cfg);saveU();S.cmpTab='rep';nav('cmpr');}return;}
-  if(d.act==='cmpGo'){S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;nav('cmpr');return;}
+  if(d.act==='cmpGo'){S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;S.cmpTest=null;nav('cmpr');return;}
   if(d.act==='cmpGen'){cmpGenerate();return;}
+  if(d.act==='cmpQuick'){cmpQuick();return;}
+  if(d.act==='cmpDocx'){cmpDocx();return;}
   if(d.act==='cmpMore'){S.cmpLimit+=60;render();return;}
-  if(d.act==='cmpClearChat'){const r=CM[CMP.key(cmpCfg())];if(r){r.chat=[];saveCM();}render();return;}
+  if(d.act==='cmpClearChat'){const r=CM[CMP.key(cmpCfg())];if(r){r.chat=[];saveCM(true);}render();return;}
 });
 document.addEventListener('submit',(e)=>{if(e.target.id==='cqf'){e.preventDefault();const el=$('cq');const v=el.value;el.value='';el.blur();cmpAsk(v);}});
 
@@ -727,7 +760,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-06g';
+const APP_VER='2026-11-06h';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
