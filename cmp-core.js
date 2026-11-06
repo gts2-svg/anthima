@@ -212,7 +212,21 @@
   ];
   const ask1 = (secs, extra) => 'اكتب الأقسام الآتية من المقارنة، كل قسم بمفتاحه وعنوانه:\n' + secs.map((s) => '- key=' + s.key + ' | ' + s.title + ': ' + s.how).join('\n') + (extra ? '\n' + extra : '');
 
-  async function report(cfg, ctx, call, onPart, cmpObj, onProg) {
+  // إذا رفض الخادم صيغة الطلب، يُعاد مرة واحدة بصيغة أبسط: بلا حفظ مؤقت للنصوص، وبلا أدوات في الأسئلة
+  function safe(call) {
+    return async (p) => {
+      try { return await call(p); }
+      catch (e) {
+        const m = String(e && e.message || e);
+        if (/مفتاح|رصيد|كثرت|اتصال|429|401/.test(m)) throw e;
+        const q = Object.assign({}, p, { system: (Array.isArray(p.system) ? p.system.map((b) => b.text).join('\n\n') : p.system) });
+        if (p.tool_choice && p.tool_choice.type === 'none') { delete q.tools; delete q.tool_choice; }
+        return await call(q);
+      }
+    };
+  }
+  async function report(cfg, ctx, call0, onPart, cmpObj, onProg) {
+    const call = safe(call0);
     // التقدم: عدد الأجزاء الكلي والمكتمل، ووقت بدء كل جزء جارٍ ليُحسب منه ما مضى من الجزء
     const P = { total: (cmpObj && (cmpObj.B.reg.length || cmpObj.A.reg.length) ? 2 : 1) + 5, done: 0, run: {}, t0: Date.now() };
     const prog = () => { if (onProg) onProg({ total: P.total, done: P.done, run: Object.values(P.run), t0: P.t0 }); };
@@ -264,7 +278,8 @@
     rep.sections = (rep.sections || []).filter((s) => !(part.sections || []).some((p) => p.key === s.key)).concat(part.sections || []);
     if (part.themes) rep.themes = part.themes; if (part.parties) rep.parties = part.parties;
   }
-  async function ask(ctx, history, q, call) {
+  async function ask(ctx, history, q, call0) {
+    const call = safe(call0);
     const system = [{ type: 'text', text: RULES + '\n- أنت الآن تجيب عن سؤال القاضي عن الفروق بين النظامين. ابدأ بالجواب مباشرة، واذكر وسوم المواد بين معقوفين داخل الكلام، مثل [قديم م٤٦] و[جديد م٢٠]. إن كان السؤال عن أحد النظامين فقط فأجب منه، واذكر مقابله في الآخر.' }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }];
     const messages = [];
     history.slice(-4).forEach((h) => { if (h.q && h.a) { messages.push({ role: 'user', content: h.q }); messages.push({ role: 'assistant', content: h.a }); } });
