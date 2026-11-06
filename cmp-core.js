@@ -229,12 +229,13 @@
     const call = safe(call0);
     // التقدم: عدد الأجزاء الكلي والمكتمل، ووقت بدء كل جزء جارٍ ليُحسب منه ما مضى من الجزء
     const P = { total: (cmpObj && (cmpObj.B.reg.length || cmpObj.A.reg.length) ? 2 : 1) + 5, done: 0, run: {}, t0: Date.now() };
-    const prog = () => { if (onProg) onProg({ total: P.total, done: P.done, run: Object.values(P.run), t0: P.t0 }); };
+    P.durs = [];
+    const prog = () => { if (onProg) onProg({ total: P.total, done: P.done, run: Object.values(P.run), t0: P.t0, avg: P.durs.length ? P.durs.reduce((a, b) => a + b, 0) / P.durs.length : 0 }); };
     let jid = 0;
     const system = [{ type: 'text', text: RULES }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }];
     const run = async (prompt, max) => {
       const id = ++jid; P.run[id] = { t: Date.now(), first: id === 1 }; prog();
-      try { return await run0(prompt, max); } finally { delete P.run[id]; P.done++; prog(); }
+      try { return await run0(prompt, max); } finally { if (id > 1) P.durs.push((Date.now() - P.run[id].t) / 1000); delete P.run[id]; P.done++; prog(); }
     };
     // Sonnet لا يقبل إلزامه بأداة بعينها، فيُطلب منه استدعاؤها نصاً، ويُقرأ JSON من النص إن كتبه بدلها
     const MUST = '\n\nأعد الجواب باستدعاء الأداة report وحدها، ولا تكتب شيئاً خارجها.';
@@ -313,15 +314,22 @@
     return out + esc(s.slice(last));
   }
   // النسبة: الأجزاء المكتملة، وما مضى من الأجزاء الجارية مقدَّراً بزمنها المعتاد (لا يتجاوز ٩٠٪ من الجزء قبل اكتماله)
+  // النسبة: الأجزاء المكتملة، وما مضى من الأجزاء الجارية؛ يتباطأ تقدم الجزء كلما طال ولا يقف
+  const EXP = (r, pg) => (r.first ? 150 : (pg.avg || 110));
   function percent(pg) {
     if (!pg) return 0; const now = Date.now();
-    const part = (pg.run || []).reduce((a, r) => a + Math.min(0.9, (now - r.t) / ((r.first ? 80 : 95) * 1000)), 0);
+    const part = (pg.run || []).reduce((a, r) => a + Math.min(0.95, 1 - Math.exp(-(now - r.t) / 1000 / EXP(r, pg))), 0);
     return Math.max(1, Math.min(99, Math.round(100 * (pg.done + part) / Math.max(1, pg.total))));
   }
+  // الوقت الباقي: ما بقي من الأجزاء الجارية، ثم الأجزاء المنتظرة على دفعات من ثلاثة
   function remaining(pg) {
-    if (!pg) return ''; const p = percent(pg) / 100; const el = (Date.now() - pg.t0) / 1000;
-    if (p < 0.08 || el < 15) return 'يقدّر الوقت…';
-    const s = Math.max(10, el / p - el); const m = Math.round(s / 60);
+    if (!pg) return ''; const now = Date.now(); const T = pg.avg || 110;
+    const run = pg.run || []; const left = Math.max(0, pg.total - pg.done - run.length);
+    let s;
+    const first = run.find((r) => r.first);
+    if (first) { const el = (now - first.t) / 1000; s = Math.max(20, Math.max(150, el * 1.15) - el) + Math.ceil(left / 3) * T; }
+    else { const cur = run.reduce((m, r) => Math.max(m, Math.max(15, T * 1.1 - (now - r.t) / 1000)), 0); s = cur + Math.ceil(Math.max(0, left - Math.max(0, 3 - run.length)) / 3) * T + (run.length ? 0 : (left ? T : 0)); }
+    const m = Math.round(s / 60);
     return s < 60 ? 'أقل من دقيقة' : m <= 1 ? 'نحو دقيقة' : m === 2 ? 'نحو دقيقتين' : 'نحو ' + ar(m) + (m <= 10 ? ' دقائق' : ' دقيقة');
   }
   function estimate(ctx) { const tok = ctx.length / 2.4; return { tok: Math.round(tok), usd: (tok * 6e-6 + 8 * tok * 0.3e-6 + 9 * 5000 * 15e-6) }; }
