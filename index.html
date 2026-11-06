@@ -209,6 +209,40 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
 #tabs .cnt{position:absolute;top:2px;inset-inline-start:calc(50% + 6px);background:var(--gold);color:#fff;border-radius:10px;font-size:10px;padding:0 5px;line-height:16px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sb) + 76px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;max-width:88%;text-align:center}
 @media (prefers-reduced-motion:reduce){.dots i{animation:none}}
+
+/* مقارنة نظامين */
+.fl{font-size:12.5px;color:var(--mut);font-weight:600;margin:4px 4px -6px}
+.cpick label{display:flex;flex-direction:column;gap:6px;padding:12px 14px;font-size:12.5px;color:var(--mut);border-top:1px solid var(--line2)}
+.cpick label:first-child{border-top:0}.cpick label small{display:none}
+.csel{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--field);color:var(--ink);padding:10px;font-size:15px;-webkit-appearance:none;appearance:none}
+.cvs{text-align:center;color:var(--gold-ink);font-weight:700;font-size:13px;margin:-4px 0}
+.btn.big{min-height:48px;font-size:15px;width:100%}
+.hint{font-size:12.5px;color:var(--mut);line-height:1.8;margin:0 4px}
+.cstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cst{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 2px;text-align:center;color:var(--ink)}
+.cst b{display:block;font-size:19px}.cst span{font-size:11px;color:var(--mut)}
+.cintro{padding:16px;display:flex;flex-direction:column;gap:10px}.cintro b{font-size:15px;color:var(--navy)}.cintro p{margin:0;line-height:1.9;font-size:14px}.cintro small{color:var(--mut);font-size:12px;line-height:1.7}
+.csec{padding:14px;border-top:1px solid var(--line2)}.csec:first-child{border-top:0}
+.csec h3{margin:0 0 8px;font-size:15px;color:var(--link);display:flex;align-items:center;gap:6px}
+.cpt{font-family:var(--text);font-size:calc(17px * var(--fs));line-height:1.9;padding:6px 0 6px;border-top:1px dashed var(--line2)}
+.cpt:first-of-type{border-top:0}
+.crefs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cref{font-family:var(--ui);font-size:11.5px;border:0;border-radius:6px;padding:1px 7px;margin:0 2px;white-space:nowrap;vertical-align:1px;cursor:pointer}
+.cref.o{background:var(--gold-soft);color:var(--gold-ink)}.cref.n{background:var(--navy-soft);color:var(--link)}
+.ctag{font-family:var(--ui);font-size:11px;border-radius:6px;padding:2px 7px;font-weight:600;white-space:nowrap}
+.ctag.mod{background:var(--gold-soft);color:var(--gold-ink)}.ctag.del{background:#fbeceb;color:var(--danger)}.ctag.new{background:var(--ok-soft);color:var(--ok)}.ctag.same{background:var(--field);color:var(--mut)}.ctag.fav{background:var(--navy);color:#fff}.ctag.mv{background:var(--field);color:var(--link)}
+.cbal{display:flex;height:10px;border-radius:6px;overflow:hidden;margin:2px 0 4px}.cbal i{display:block}
+.cbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-bottom:6px;gap:6px}
+.cprog,.cfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);padding:0 4px}
+.crow{padding:12px 14px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px}.crow:first-child{border-top:0}
+.crh{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.crr{flex:1;display:flex;flex-wrap:wrap;gap:3px;align-items:center}.carr{color:var(--mut);font-size:12px}
+.cnote{font-size:13px;color:var(--mut);line-height:1.7}
+.ctx{all:unset;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;font-family:var(--text);font-size:calc(17px * var(--fs));line-height:1.9;white-space:pre-line;color:var(--ink);cursor:pointer;text-align:justify}
+.ctx.open{display:block}
+.ctx del,.cans del{background:#f6d6d3;color:#7d211b;text-decoration:line-through;text-decoration-color:var(--danger)}
+.ctx ins{background:#d3ecdf;color:#164d3b;text-decoration:none}
+.cans{white-space:pre-line}
+@media (prefers-color-scheme:dark){.ctx del{background:#4a2321;color:#f2b8b2}.ctx ins{background:#173b2e;color:#a9e0c6}.ctag.del{background:#3a1f1e}}
 </style>
 </head>
 <body>
@@ -225,6 +259,7 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
   </nav>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<script src="cmp-core.js"></script>
 <script>
 (function(){
 'use strict';
@@ -302,7 +337,7 @@ function route(){
   const h=(location.hash||'#home').slice(1);let m;S.noteEdit=null;
   if((m=h.match(/^read-([a-z0-9]+)-(\d+)(?:-([0-9_]+))?$/))&&S.laws[m[1]]){S.view='read';S.lawId=m[1];S.chap=+m[2];const c=chaptersOf(m[1])[S.chap];S.sel=m[3]||(c?c.arts[0].n:null);}
   else if((m=h.match(/^book-([a-z0-9]+)$/))&&S.laws[m[1]]){S.view='book';S.lawId=m[1];S.tocQ='';}
-  else if(['home','saved','cmp','ask','set','search'].includes(h))S.view=h;
+  else if(['home','saved','cmp','cmpr','ask','set','search'].includes(h))S.view=h;
   else S.view='home';
   render(true);
 }
@@ -379,7 +414,12 @@ function vSaved(){
   return '<div class="wrap">'+(ks.length?'<div class="card">'+ks.map(row).join('')+'</div>':'<div class="empty">اضغط «حفظ» على أي مادة لتظهر هنا.</div>')+(nk.length?'<div class="sh"><h2>عليها ملاحظات</h2></div><div class="card">'+nk.map(row).join('')+'</div>':'')+'</div>';
 }
 function vCmp(){
-  top.className='';top.innerHTML=topBar('المقارنة',U.compare.length?U.compare.length+' مادة':'');
+  top.className='';top.innerHTML=topBar('المقارنة',S.cmpSeg==='laws'?'بين نظامين':(U.compare.length?U.compare.length+' مادة':''));
+  const seg='<div class="seg">'+[['laws','بين نظامين'],['arts','مواد اخترتها']].map((x)=>'<button data-cseg="'+x[0]+'" aria-pressed="'+(S.cmpSeg===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
+  if(S.cmpSeg==='laws')return '<div class="wrap">'+seg+vCmpLaws()+'</div>';
+  return vCmpSel().replace('<div class="wrap">','<div class="wrap">'+seg);
+}
+function vCmpSel(){
   const ks=U.compare.filter(fromKey);
   if(!ks.length)return '<div class="wrap"><div class="empty">اضغط «قارن» على أي مادتين أو أكثر لتظهر هنا تحت بعض، وتنسخها كلها للتسبيب مرة وحدة.</div></div>';
   return '<div class="wrap"><div class="btns"><button class="btn gold" data-act="cmpCite">'+IC.pen+'نسخ '+(ks.length>1?'المواد':'المادة')+' للتسبيب</button><button class="btn" data-act="cmpClear">مسح المقارنة</button></div>'+
@@ -463,18 +503,164 @@ async function ask(q){
 
 /* ---------- render ---------- */
 function render(fresh){
-  const v={home:vHome,book:vBook,read:vRead,search:vSearch,saved:vSaved,cmp:vCmp,ask:vAsk,set:vSet}[S.view]||vHome;
+  const v={home:vHome,book:vBook,read:vRead,search:vSearch,saved:vSaved,cmp:vCmp,cmpr:vCmpR,ask:vAsk,set:vSet}[S.view]||vHome;
   if(!S.loaded&&S.view!=='home'&&S.view!=='set'){S.view='home';}
   const keepScroll=!fresh?main.scrollTop:0;const hx={};if(!fresh)['chs','nms'].forEach((id)=>{const el=$(id);if(el)hx[id]=el.scrollLeft;});
   main.innerHTML=v();
   Object.keys(hx).forEach((id)=>{const el=$(id);if(el)el.scrollLeft=hx[id];});
-  const tab={home:'home',book:'home',read:'home',search:'home',saved:'saved',cmp:'cmp',ask:'ask',set:'set'}[S.view];
+  const tab={home:'home',book:'home',read:'home',search:'home',saved:'saved',cmp:'cmp',cmpr:'cmp',ask:'ask',set:'set'}[S.view];
   document.querySelectorAll('#tabs [data-tab]').forEach((b)=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
   const cc=$('cmpCnt');cc.hidden=!U.compare.length;cc.textContent=U.compare.length;
   if(fresh){main.scrollTop=0;if(S.view==='read'&&S.sel){requestAnimationFrame(()=>{const el=$('sel');if(el&&S.sel!==chaptersOf(S.lawId)[S.chap].arts[0].n)el.scrollIntoView({block:'start'});centerIn('nms','.on');centerIn('chs','[aria-pressed="true"]');});}}
   else main.scrollTop=keepScroll;
 }
 function centerIn(id,sel){const box=$(id);if(!box)return;const el=box.querySelector(sel);if(el)box.scrollLeft=el.offsetLeft-box.clientWidth/2+el.offsetWidth/2;}
+
+/* ---------- مقارنة نظامين ---------- */
+const CM=ls('anz_cmp')||{};
+Object.values(CM).forEach((r)=>{delete r.running;(r.chat||[]).forEach((m)=>{if(m.wait){delete m.wait;m.err='انقطع قبل أن يكتمل';}});});
+function saveCM(){try{localStorage.setItem('anz_cmp',JSON.stringify(CM));}catch(e){toast('تعذر حفظ التقرير في ذاكرة الجهاز');}}
+S.cmpSeg=S.cmpSeg||'laws';S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;S.cmpOpen={};S.cmpDiff={};S.cmpRun=null;S.cmpAsking=false;
+function cmpCfg(){
+  const c=U.cmpCfg;if(c&&S.laws[c.oLaw]&&S.laws[c.nLaw])return c;
+  const o=S.laws.tanfeethold?'tanfeethold':S.order[0],n=S.laws.tanfeeth?'tanfeeth':S.order[1];
+  U.cmpCfg={oLaw:o,oReg:CMP.defaultReg(S.laws,S.arts,o),nLaw:n,nReg:CMP.defaultReg(S.laws,S.arts,n)};return U.cmpCfg;
+}
+let cmpMemo={k:'',v:null};
+function getCmp(cfg){const k=CMP.key(cfg)+'|'+(S.laws[cfg.oLaw]||{}).name;if(cmpMemo.k!==k){cmpMemo={k,v:CMP.compare(S.laws,S.arts,cfg)};S.cmpDiff={};}return cmpMemo.v;}
+const shortName=(id)=>{const L=S.laws[id];return L?L.name.replace(/^نظام\s+/,'').replace(/\s*—\s*ملغى/,''):'';};
+async function cmpCall(p){
+  const body={model:p.tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:p.max||4000,system:p.system,messages:p.messages};
+  if(p.tools){body.tools=p.tools;body.tool_choice=p.tool_choice;}
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':U.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الطلبات، انتظر دقيقة ثم أعد المحاولة.':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'تعذر الحصول على جواب ('+r.status+(msg?': '+msg.slice(0,80):'')+').');}
+  const c=j.content||[];const tu=c.find((x)=>x.type==='tool_use');
+  return {data:tu?tu.input:null,text:c.filter((x)=>x.type==='text').map((x)=>x.text).join(''),stop:j.stop_reason||''};
+}
+async function cmpGenerate(){
+  if(S.cmpRun)return;
+  if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
+  if(!navigator.onLine){toast('لا يوجد اتصال بالإنترنت');return;}
+  const cfg=Object.assign({},cmpCfg()),k=CMP.key(cfg),cmp=getCmp(cfg),ctx=CMP.doc(S.laws,cfg,cmp);
+  const old=CM[k];const rep={cfg,at:Date.now(),sections:[],chat:old&&old.chat||[],running:true};CM[k]=rep;S.cmpRun={k,done:0};render();
+  try{const r=await CMP.report(cfg,ctx,cmpCall,(p)=>{CMP.mergeSections(rep,p);S.cmpRun.done++;saveCM();if(S.view==='cmpr')render();},cmp);rep.errs=r.errs;}
+  catch(e){rep.errs=[e.message||String(e)];}
+  delete rep.running;S.cmpRun=null;saveCM();render();
+  toast(rep.errs&&rep.errs.length?'اكتمل التقرير مع نقص في بعض الأقسام':'اكتمل التقرير الشامل');
+}
+async function cmpAsk(q){
+  q=String(q||'').trim();if(!q||S.cmpAsking)return;
+  if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
+  const cfg=cmpCfg(),k=CMP.key(cfg);const rep=CM[k]||(CM[k]={cfg,sections:[],chat:[]});rep.chat=rep.chat||[];
+  const item={q,wait:true};rep.chat.push(item);S.cmpAsking=true;render();
+  try{item.a=await CMP.ask(CMP.doc(S.laws,cfg,getCmp(cfg)),rep.chat.filter((x)=>x.a),q,cmpCall);}catch(e){item.err=e.message||String(e);}
+  delete item.wait;S.cmpAsking=false;saveCM();render();
+}
+function lawSel(id,val){return '<select class="csel" id="'+id+'">'+S.order.map((x)=>'<option value="'+x+'"'+(x===val?' selected':'')+'>'+esc(S.laws[x].name)+'</option>').join('')+'</select>';}
+function regSel(id,lawId,val){const o=CMP.regOptions(S.laws,S.arts,lawId);return '<select class="csel" id="'+id+'"><option value="">بدون لائحة</option>'+o.map((x)=>'<option value="'+x.v+'"'+(x.v===val?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>';}
+function vCmpLaws(){
+  const c=cmpCfg();const n=(id)=>(S.arts[id]||[]).length;
+  const saved=Object.values(CM).filter((r)=>r.cfg&&r.sections&&r.sections.length&&S.laws[r.cfg.oLaw]&&S.laws[r.cfg.nLaw]).sort((a,b)=>(b.at||0)-(a.at||0));
+  return '<div class="fl">الأول (القديم)</div><div class="card cpick"><label>النظام<small>'+n(c.oLaw)+' مادة</small>'+lawSel('coLaw',c.oLaw)+'</label><label>لائحته'+regSel('coReg',c.oLaw,c.oReg)+'</label></div>'+
+   '<div class="cvs">⇅ مقابل</div>'+
+   '<div class="fl">الثاني (الجديد)</div><div class="card cpick"><label>النظام<small>'+n(c.nLaw)+' مادة</small>'+lawSel('cnLaw',c.nLaw)+'</label><label>لائحته'+regSel('cnReg',c.nLaw,c.nReg)+'</label></div>'+
+   '<button class="btn gold big" data-act="cmpGo"'+(c.oLaw===c.nLaw?' disabled':'')+'>قارن</button>'+
+   '<p class="hint">المقارنة مادة مادة تظهر فوراً وبلا إنترنت. والتقرير الشامل يكتبه الذكي مرة واحدة من المفتاح ويُحفظ، ثم تسأله ما شئت عن الفروق.</p>'+
+   (saved.length?'<div class="fl">مقارنات محفوظة</div><div class="card">'+saved.map((r)=>'<button class="row" data-cload="'+esc(CMP.key(r.cfg))+'"><span class="t"><b>'+esc(shortName(r.cfg.oLaw)+' ↔ '+shortName(r.cfg.nLaw))+'</b><small>تقرير محفوظ · '+new Date(r.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long'})+'</small></span></button>').join('')+'</div>':'');
+}
+function stTag(st){return {mod:'<span class="ctag mod">معدّلة</span>',del:'<span class="ctag del">لا مقابل لها</span>',new:'<span class="ctag new">جديدة</span>',same:'<span class="ctag same">كما هي</span>'}[st];}
+function cmpRows(cfg){const cmp=getCmp(cfg);const rep=CM[CMP.key(cfg)];const ai=rep&&rep.map?CMP.aiRows(cmp,rep.map):null;return ai||cmp;}
+function vCmpR(){
+  const cfg=cmpCfg(),k=CMP.key(cfg),rep=CM[k];
+  top.className='';top.innerHTML=topBar(shortName(cfg.oLaw)+' ↔ '+shortName(cfg.nLaw),'مقارنة بين نظامين');
+  const R=cmpRows(cfg);
+  const seg='<div class="seg">'+[['rep','التقرير'],['arts','مادة مادة'],['ask','اسأل']].map((x)=>'<button data-ctab="'+x[0]+'" aria-pressed="'+(S.cmpTab===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
+  const c=R.c.all;
+  const stats='<div class="cstats">'+[['mod','معدّلة'],['del','لا مقابل لها'],['new','جديدة'],['same','كما هي']].map((x)=>'<button class="cst" data-cst="'+x[0]+'"><b>'+CMP.ar(c[x[0]])+'</b><span>'+x[1]+'</span></button>').join('')+'</div>';
+  let body='';
+  if(S.cmpTab==='rep')body=stats+vCmpRep(cfg,rep);
+  else if(S.cmpTab==='arts')body=vCmpArts2(cfg,R);
+  else body=vCmpAsk(cfg,rep);
+  return '<div class="wrap">'+seg+body+'</div>';
+}
+function ptHtml(p,cfg,showFav){
+  const refs=(p.refs||[]).filter((r)=>String(p.text).indexOf(r)<0);
+  return '<div class="cpt"><div>'+CMP.refsHTML(p.text,cfg)+'</div>'+((refs.length||(showFav&&p.favors))?'<div class="crefs">'+(showFav&&p.favors?'<span class="ctag fav">'+esc(p.favors)+'</span>':'')+refs.map((r)=>CMP.refsHTML(r,cfg)).join('')+'</div>':'')+'</div>';
+}
+function vCmpRep(cfg,rep){
+  const running=S.cmpRun&&S.cmpRun.k===CMP.key(cfg);
+  const secs=rep&&rep.sections?CMP.order(rep):[];
+  if(!secs.length&&!running){
+    const est=CMP.estimate(CMP.doc(S.laws,cfg,getCmp(cfg)));
+    return '<div class="card cintro"><b>التقرير الشامل</b><p>يقرأ الذكي (Sonnet) النظامين ولائحتيهما كاملة، ثم يكتب: الخلاصة، وما استُجد وما حُذف وما تغيّر، والمدد، وموضوعات النظامين موضوعاً موضوعاً، وميزان الأطراف، والسريان، ومسائل ينتبه لها القاضي، مع رقم كل مادة في الطرفين. ويطابق المواد مطابقة دقيقة في «مادة مادة».</p><small>يُكتب مرة واحدة ويُحفظ · التكلفة التقريبية '+est.usd.toFixed(1)+' دولار · يستغرق بضع دقائق، والتطبيق مفتوح</small>'+
+     (U.key?'<button class="btn gold big" data-act="cmpGen">أنشئ التقرير الشامل</button>':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+'</div>';
+  }
+  const par=rep&&rep.parties||[];
+  const out=secs.map((s)=>{
+    const pts=s.points||[];let extra='';
+    if(s.key==='balance'&&par.length===2){const a=pts.filter((p)=>p.favors===par[0]).length,b=pts.filter((p)=>p.favors===par[1]).length,m=pts.length-a-b,t=Math.max(1,a+b+m);
+      extra='<div class="cbal"><i style="width:'+(a/t*100)+'%;background:var(--navy)"></i><i style="width:'+(m/t*100)+'%;background:var(--line)"></i><i style="width:'+(b/t*100)+'%;background:var(--gold)"></i></div><div class="cbl"><span>لصالح '+esc(par[0])+' · '+CMP.ar(a)+'</span><span>متوازن · '+CMP.ar(m)+'</span><span>لصالح '+esc(par[1])+' · '+CMP.ar(b)+'</span></div>';}
+    const cnt=(s.key==='added'||s.key==='removed')?' <span class="ctag '+(s.key==='added'?'new':'del')+'">'+CMP.ar(pts.length)+'</span>':'';
+    return '<div class="csec"><h3>'+esc(s.title)+cnt+'</h3>'+extra+pts.map((p)=>ptHtml(p,cfg,s.key==='balance')).join('')+'</div>';
+  }).join('');
+  const foot=running?'<div class="cprog">يكتب التقرير… اكتمل '+CMP.ar(S.cmpRun.done)+' من الأجزاء <span class="dots"><i></i><i></i><i></i></span></div>':
+    '<div class="cfoot">'+(rep.errs&&rep.errs.length?'<span class="err">لم يكتمل بعض الأقسام ('+esc(rep.errs[0])+').</span>':'<span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet</span>')+'<button class="link" data-act="cmpGen">إعادة الإنشاء</button></div>';
+  return (out?'<div class="card">'+out+'</div>':'')+foot;
+}
+function rowHtml(r,i,cfg){
+  const id=S.cmpScope+':'+i;const open=S.cmpOpen[id];
+  const os=r.os||(r.o?[r.o]:[]);
+  const head=(os.length?os.map((o)=>CMP.refsHTML(o.ref,cfg)).join(''):'')+(r.n&&os.length?'<span class="carr">←</span>':'')+(r.n?CMP.refsHTML(r.n.ref,cfg):'');
+  let txt;
+  if(r.st==='mod'){const dk=id+'|'+(r.n&&r.n.ref);if(!S.cmpDiff[dk])S.cmpDiff[dk]=CMP.diffHTML(os.map((o)=>o.text).join('\n'),r.n.text);txt=S.cmpDiff[dk];}
+  else txt=esc((r.n||r.o).text);
+  const near=!r.note&&r.near?'<div class="cnote">أقرب مادة في '+(r.st==='del'?'الجديد':'القديم')+': '+CMP.refsHTML(r.near.ref,cfg)+'</div>':'';
+  const moved=r.moved?'<span class="ctag mv">'+(r.n&&r.n.kind==='reg'?'من النظام إلى اللائحة':'بين النظام واللائحة')+'</span>':'';
+  return '<div class="crow"><div class="crh"><span class="crr">'+head+'</span>'+moved+stTag(r.st)+'</div>'+(r.note?'<div class="cnote">'+CMP.refsHTML(r.note,cfg)+'</div>':'')+near+
+   '<button class="ctx'+(open?' open':'')+'" data-cx="'+esc(id)+'">'+txt+'</button></div>';
+}
+function vCmpArts2(cfg,R){
+  const rows=(S.cmpScope==='reg'?R.reg:R.law);const c=R.c[S.cmpScope]||{};
+  const list=rows.map((r,i)=>[r,i]).filter(([r])=>S.cmpSt==='all'||r.st===S.cmpSt);
+  const hasReg=R.reg&&R.reg.length;
+  return (R.ai?'':'<div class="note">هذه مطابقة تقريبية بتشابه النص، وقد تفوتها مادة أُعيدت صياغتها كلياً. تصير دقيقة بعد إنشاء التقرير الشامل.</div>')+
+   (hasReg?'<div class="chips">'+[['law','النظام'],['reg','اللائحة']].map((x)=>'<button class="chip" data-cscope="'+x[0]+'" aria-pressed="'+(S.cmpScope===x[0])+'">'+x[1]+'</button>').join('')+'</div>':'')+
+   '<div class="chips">'+[['all','الكل',rows.length],['mod','معدّلة',c.mod],['del','لا مقابل لها',c.del],['new','جديدة',c.new],['same','كما هي',c.same]].map((x)=>'<button class="chip" data-cstf="'+x[0]+'" aria-pressed="'+(S.cmpSt===x[0])+'">'+x[1]+' · '+CMP.ar(x[2]||0)+'</button>').join('')+'</div>'+
+   (list.length?'<div class="card">'+list.slice(0,S.cmpLimit).map(([r,i])=>rowHtml(r,i,cfg)).join('')+'</div>':'<div class="empty">لا شيء هنا.</div>')+
+   (list.length>S.cmpLimit?'<button class="btn" data-act="cmpMore">عرض المزيد ('+CMP.ar(list.length-S.cmpLimit)+')</button>':'');
+}
+function vCmpAsk(cfg,rep){
+  const chat=rep&&rep.chat||[];
+  return '<form class="askbox" id="cqf"><textarea id="cq" rows="1" placeholder="مثال: هل صار حبس المدين أصعب في النظام الجديد؟" aria-label="سؤالك عن الفروق"></textarea><button class="send" aria-label="إرسال"'+(S.cmpAsking?' disabled':'')+'>'+IC.send+'</button></form>'+
+   (U.key?'':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+
+   (chat.length?'':'<div class="empty">اسأل أي سؤال عن الفروق بين النظامين، والنظامان ولائحتاهما كاملة أمام الذكي في كل سؤال. أول سؤال أغلى قليلاً، وما بعده خلال الساعة أرخص بكثير.</div>')+
+   chat.slice().reverse().map((m)=>'<div class="qa"><div class="bub">'+esc(m.q)+'</div><div class="ans">'+(m.wait?'<span class="und">يقرأ النظامين <span class="dots"><i></i><i></i><i></i></span></span>':m.err?'<span class="err">'+esc(m.err)+'</span>':'<span class="cans">'+CMP.refsHTML(m.a,cfg)+'</span>')+'</div></div>').join('')+
+   (chat.length?'<button class="link" data-act="cmpClearChat">مسح المحادثة</button>':'');
+}
+function cmpPick(){
+  const g=(id)=>{const el=$(id);return el?el.value:'';};const c=cmpCfg();
+  const oLaw=g('coLaw')||c.oLaw,nLaw=g('cnLaw')||c.nLaw;
+  U.cmpCfg={oLaw,nLaw,oReg:oLaw!==c.oLaw?CMP.defaultReg(S.laws,S.arts,oLaw):g('coReg'),nReg:nLaw!==c.nLaw?CMP.defaultReg(S.laws,S.arts,nLaw):g('cnReg')};saveU();render();
+}
+document.addEventListener('change',(e)=>{if(['coLaw','coReg','cnLaw','cnReg'].includes(e.target.id))cmpPick();});
+document.addEventListener('click',(e)=>{
+  const t=e.target.closest('button');if(!t)return;const d=t.dataset;
+  if(d.act==='cmp'){S.cmpSeg='arts';return;}
+  if(d.cseg){S.cmpSeg=d.cseg;render();return;}
+  if(d.ctab){S.cmpTab=d.ctab;render(true);return;}
+  if(d.cscope){S.cmpScope=d.cscope;S.cmpLimit=40;render();return;}
+  if(d.cstf){S.cmpSt=d.cstf;S.cmpLimit=40;render();return;}
+  if(d.cst){S.cmpTab='arts';S.cmpSt=d.cst;S.cmpLimit=40;render(true);return;}
+  if(d.cx){S.cmpOpen[d.cx]=!S.cmpOpen[d.cx];render();return;}
+  if(d.cref){const i=d.cref.indexOf('|');openArticle(d.cref.slice(0,i),d.cref.slice(i+1));return;}
+  if(d.cload){const r=CM[d.cload];if(r){U.cmpCfg=Object.assign({},r.cfg);saveU();S.cmpTab='rep';nav('cmpr');}return;}
+  if(d.act==='cmpGo'){S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;nav('cmpr');return;}
+  if(d.act==='cmpGen'){cmpGenerate();return;}
+  if(d.act==='cmpMore'){S.cmpLimit+=60;render();return;}
+  if(d.act==='cmpClearChat'){const r=CM[CMP.key(cmpCfg())];if(r){r.chat=[];saveCM();}render();return;}
+});
+document.addEventListener('submit',(e)=>{if(e.target.id==='cqf'){e.preventDefault();const el=$('cq');const v=el.value;el.value='';el.blur();cmpAsk(v);}});
 
 /* ---------- events ---------- */
 document.addEventListener('click',(e)=>{
@@ -521,7 +707,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-06a';
+const APP_VER='2026-11-06b';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
