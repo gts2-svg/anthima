@@ -1,5 +1,5 @@
 /* anthima — يحفظ التطبيق داخل الجهاز ليفتح بدون إنترنت، ويجلب أحدث نسخة كلما توفر الاتصال */
-const CACHE = 'anthima-2026-11-06e';
+const CACHE = 'anthima-2026-11-06f';
 const CORE = ['./', 'index.html', 'cmp-core.js', 'manifest.webmanifest', 'laws.json', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));

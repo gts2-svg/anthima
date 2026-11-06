@@ -463,7 +463,8 @@ function vSet(){
 function parseJSON(t){const s=String(t||'');const i=s.indexOf('{'),j=s.lastIndexOf('}');if(i<0||j<i)return null;try{return JSON.parse(s.slice(i,j+1));}catch(e){return null;}}
 async function callClaude(tier,prompt,max,schema){
   const body={model:tier==='strong'?'claude-sonnet-5-5':'claude-haiku-5-5',max_tokens:max||900,system:'أنت مساعد بحث لقاضٍ سعودي في نصوص الأنظمة السعودية. تجيب بالعربية الفصحى.',messages:[{role:'user',content:prompt}]};
-  if(schema){body.tools=[{name:'reply',description:'أعد الجواب بهذه الحقول',input_schema:schema}];body.tool_choice={type:'tool',name:'reply'};}
+  // Sonnet لا يقبل إلزامه بأداة بعينها، فيُطلب منه استدعاؤها نصاً
+  if(schema){body.tools=[{name:'reply',description:'أعد الجواب بهذه الحقول',input_schema:schema}];if(tier==='strong'){body.tool_choice={type:'auto'};body.messages[0].content+='\n\nأعد الجواب باستدعاء الأداة reply وحدها.';}else body.tool_choice={type:'tool',name:'reply'};}
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':U.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
   if(!r.ok){const msg=(j.error&&j.error.message)||'';throw new Error(r.status===401?'مفتاح API غير صحيح. راجعه في الإعدادات.':r.status===429?'كثرت الأسئلة، انتظر قليلاً ثم اسأل.':/credit|balance/i.test(msg)?'رصيد حساب API لا يكفي.':'تعذر الحصول على جواب ('+r.status+(msg?': '+msg.slice(0,80):'')+').');}
@@ -726,7 +727,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-06e';
+const APP_VER='2026-11-06f';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){

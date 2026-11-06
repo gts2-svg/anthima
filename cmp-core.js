@@ -236,10 +236,13 @@
       const id = ++jid; P.run[id] = { t: Date.now(), first: id === 1 }; prog();
       try { return await run0(prompt, max); } finally { delete P.run[id]; P.done++; prog(); }
     };
+    // Sonnet لا يقبل إلزامه بأداة بعينها، فيُطلب منه استدعاؤها نصاً، ويُقرأ JSON من النص إن كتبه بدلها
+    const MUST = '\n\nأعد الجواب باستدعاء الأداة report وحدها، ولا تكتب شيئاً خارجها.';
+    const pick = (r) => { if (r && !r.data && r.text) { const m = String(r.text).match(/\{[\s\S]*\}/); if (m) try { r.data = JSON.parse(m[0]); } catch (e) {} } return r; };
     const run0 = async (prompt, max) => {
-      let r = await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: prompt }], max: max || 8000 });
+      let r = pick(await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: prompt + MUST }], max: max || 8000 }));
       const ok = (d) => d && ((Array.isArray(d.sections) && d.sections.length) || (Array.isArray(d.map) && d.map.length));
-      if (!ok(r.data)) r = await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: prompt }], max: 12000 });
+      if (!ok(r.data)) r = pick(await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: prompt + MUST }], max: 12000 }));
       if (!ok(r.data)) throw new Error('لم يصل جواب مكتمل لهذا القسم');
       return r.data;
     };
