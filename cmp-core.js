@@ -212,9 +212,17 @@
   ];
   const ask1 = (secs, extra) => 'اكتب الأقسام الآتية من المقارنة، كل قسم بمفتاحه وعنوانه:\n' + secs.map((s) => '- key=' + s.key + ' | ' + s.title + ': ' + s.how).join('\n') + (extra ? '\n' + extra : '');
 
-  async function report(cfg, ctx, call, onPart, cmpObj) {
+  async function report(cfg, ctx, call, onPart, cmpObj, onProg) {
+    // التقدم: عدد الأجزاء الكلي والمكتمل، ووقت بدء كل جزء جارٍ ليُحسب منه ما مضى من الجزء
+    const P = { total: (cmpObj && (cmpObj.B.reg.length || cmpObj.A.reg.length) ? 2 : 1) + 5, done: 0, run: {}, t0: Date.now() };
+    const prog = () => { if (onProg) onProg({ total: P.total, done: P.done, run: Object.values(P.run), t0: P.t0 }); };
+    let jid = 0;
     const system = [{ type: 'text', text: RULES }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral', ttl: '1h' } }];
     const run = async (prompt, max) => {
+      const id = ++jid; P.run[id] = { t: Date.now(), first: id === 1 }; prog();
+      try { return await run0(prompt, max); } finally { delete P.run[id]; P.done++; prog(); }
+    };
+    const run0 = async (prompt, max) => {
       let r = await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: prompt }], max: max || 8000 });
       const ok = (d) => d && ((Array.isArray(d.sections) && d.sections.length) || (Array.isArray(d.map) && d.map.length));
       if (!ok(r.data)) r = await call({ tier: 'strong', system, tools: [TOOL], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: prompt }], max: 12000 });
@@ -239,6 +247,7 @@
       jobs.splice(1, 0, mapJob('law', cmpObj.B.law, 'مادة من النظام القديم (لا اللائحة)'));
       if (cmpObj.B.reg.length || cmpObj.A.reg.length) jobs.splice(2, 0, mapJob('reg', cmpObj.B.reg, 'فقرة من اللائحة القديمة'));
     }
+    P.total = 1 + jobs.length; prog();
     const errs = [];
     let k = 0;
     const worker = async () => { while (k < jobs.length) { const j = jobs[k++]; try { onPart(await j()); } catch (e) { errs.push(e.message || String(e)); } } };
@@ -285,8 +294,20 @@
     }
     return out + esc(s.slice(last));
   }
+  // النسبة: الأجزاء المكتملة، وما مضى من الأجزاء الجارية مقدَّراً بزمنها المعتاد (لا يتجاوز ٩٠٪ من الجزء قبل اكتماله)
+  function percent(pg) {
+    if (!pg) return 0; const now = Date.now();
+    const part = (pg.run || []).reduce((a, r) => a + Math.min(0.9, (now - r.t) / ((r.first ? 80 : 95) * 1000)), 0);
+    return Math.max(1, Math.min(99, Math.round(100 * (pg.done + part) / Math.max(1, pg.total))));
+  }
+  function remaining(pg) {
+    if (!pg) return ''; const p = percent(pg) / 100; const el = (Date.now() - pg.t0) / 1000;
+    if (p < 0.08 || el < 15) return 'يقدّر الوقت…';
+    const s = Math.max(10, el / p - el); const m = Math.round(s / 60);
+    return s < 60 ? 'أقل من دقيقة' : m <= 1 ? 'نحو دقيقة' : m === 2 ? 'نحو دقيقتين' : 'نحو ' + ar(m) + (m <= 10 ? ' دقائق' : ' دقيقة');
+  }
   function estimate(ctx) { const tok = ctx.length / 2.4; return { tok: Math.round(tok), usd: (tok * 6e-6 + 8 * tok * 0.3e-6 + 9 * 5000 * 15e-6) }; }
   function key(cfg) { return [cfg.oLaw, cfg.oReg || '-', cfg.nLaw, cfg.nReg || '-'].join('|'); }
 
-  G.CMP = { aiRows, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, order, mergeSections, ask, refsHTML, estimate, key };
+  G.CMP = { percent, remaining, aiRows, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, order, mergeSections, ask, refsHTML, estimate, key };
 })(typeof window !== 'undefined' ? window : globalThis);

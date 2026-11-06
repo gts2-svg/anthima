@@ -243,6 +243,11 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
 .ctx ins{background:#d3ecdf;color:#164d3b;text-decoration:none}
 .cans{white-space:pre-line}
 @media (prefers-color-scheme:dark){.ctx del{background:#4a2321;color:#f2b8b2}.ctx ins{background:#173b2e;color:#a9e0c6}.ctag.del{background:#3a1f1e}}
+
+.cpbar{background:var(--card);border:1px solid var(--gold-line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.cpbt{display:flex;justify-content:space-between;align-items:baseline}.cpbt b{font-size:22px;color:var(--gold-ink);font-variant-numeric:tabular-nums}.cpbt span{font-size:13px;color:var(--mut)}
+.cpbb{height:10px;border-radius:6px;background:var(--field);overflow:hidden}.cpbb i{display:block;height:100%;background:var(--gold);border-radius:6px;transition:width .9s linear}
+.cpbar small{font-size:12px;color:var(--mut);line-height:1.6}
 </style>
 </head>
 <body>
@@ -544,11 +549,24 @@ async function cmpGenerate(){
   if(!navigator.onLine){toast('لا يوجد اتصال بالإنترنت');return;}
   const cfg=Object.assign({},cmpCfg()),k=CMP.key(cfg),cmp=getCmp(cfg),ctx=CMP.doc(S.laws,cfg,cmp);
   const old=CM[k];const rep={cfg,at:Date.now(),sections:[],chat:old&&old.chat||[],running:true};CM[k]=rep;S.cmpRun={k,done:0};render();
-  try{const r=await CMP.report(cfg,ctx,cmpCall,(p)=>{CMP.mergeSections(rep,p);S.cmpRun.done++;saveCM();if(S.view==='cmpr')render();},cmp);rep.errs=r.errs;}
+  cmpTick(true);
+  try{const r=await CMP.report(cfg,ctx,cmpCall,(p)=>{CMP.mergeSections(rep,p);S.cmpRun.done++;saveCM();if(S.view==='cmpr')render();},cmp,(pg)=>{S.cmpRun.pg=pg;cmpTick();});rep.errs=r.errs;}
   catch(e){rep.errs=[e.message||String(e)];}
   delete rep.running;S.cmpRun=null;saveCM();render();
   toast(rep.errs&&rep.errs.length?'اكتمل التقرير مع نقص في بعض الأقسام':'اكتمل التقرير الشامل');
 }
+let cmpTimer=null;
+// شريط التقدم: يُحدَّث كل ثانية دون إعادة رسم الصفحة
+function cmpTick(start){
+  if(start){clearInterval(cmpTimer);cmpTimer=setInterval(()=>{if(!S.cmpRun){clearInterval(cmpTimer);cmpTimer=null;return;}cmpTick();},1000);}
+  const g=S.cmpRun&&S.cmpRun.pg;const pc=g?CMP.percent(g):1;
+  const a=document.getElementById('cpi'),b=document.getElementById('cpp'),c=document.getElementById('cpr'),d=document.getElementById('cpn'),e=document.getElementById('cps');
+  if(a)a.style.width=pc+'%';if(b)b.textContent=CMP.ar(pc)+'٪';if(c)c.textContent=g?remTxt(g):'يبدأ…';
+  if(d&&g)d.textContent='اكتمل '+CMP.ar(g.done)+' من '+CMP.ar(g.total)+' أجزاء';if(e)e.textContent=' · '+CMP.ar(pc)+'٪';
+}
+function remTxt(g){const r=CMP.remaining(g);return /^يقدّر/.test(r)?r:'باقي '+r;}
+function cmpBar(){const g=S.cmpRun&&S.cmpRun.pg;const pc=g?CMP.percent(g):1;
+  return '<div class="cpbar"><div class="cpbt"><b id="cpp">'+CMP.ar(pc)+'٪</b><span id="cpr">'+(g?remTxt(g):'يبدأ…')+'</span></div><div class="cpbb"><i id="cpi" style="width:'+pc+'%"></i></div><small><span id="cpn">'+(g?'اكتمل '+CMP.ar(g.done)+' من '+CMP.ar(g.total)+' أجزاء':'يقرأ النظامين ولائحتيهما')+'</span> · الأقسام تظهر تحت أولاً بأول، وخلّ التطبيق مفتوحاً</small></div>';}
 async function cmpAsk(q){
   q=String(q||'').trim();if(!q||S.cmpAsking)return;
   if(!U.key){toast('أضف مفتاح API من الإعدادات أولاً');return;}
@@ -575,7 +593,7 @@ function vCmpR(){
   const cfg=cmpCfg(),k=CMP.key(cfg),rep=CM[k];
   top.className='';top.innerHTML=topBar(shortName(cfg.oLaw)+' ↔ '+shortName(cfg.nLaw),'مقارنة بين نظامين');
   const R=cmpRows(cfg);
-  const seg='<div class="seg">'+[['rep','التقرير'],['arts','مادة مادة'],['ask','اسأل']].map((x)=>'<button data-ctab="'+x[0]+'" aria-pressed="'+(S.cmpTab===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
+  const seg='<div class="seg">'+[['rep','التقرير'],['arts','مادة مادة'],['ask','اسأل']].map((x)=>'<button data-ctab="'+x[0]+'" aria-pressed="'+(S.cmpTab===x[0])+'">'+x[1]+(x[0]==='rep'&&S.cmpRun?'<span id="cps"> · '+CMP.ar(CMP.percent(S.cmpRun.pg))+'٪</span>':'')+'</button>').join('')+'</div>';
   const c=R.c.all;
   const stats='<div class="cstats">'+[['mod','معدّلة'],['del','لا مقابل لها'],['new','جديدة'],['same','كما هي']].map((x)=>'<button class="cst" data-cst="'+x[0]+'"><b>'+CMP.ar(c[x[0]])+'</b><span>'+x[1]+'</span></button>').join('')+'</div>';
   let body='';
@@ -604,9 +622,9 @@ function vCmpRep(cfg,rep){
     const cnt=(s.key==='added'||s.key==='removed')?' <span class="ctag '+(s.key==='added'?'new':'del')+'">'+CMP.ar(pts.length)+'</span>':'';
     return '<div class="csec"><h3>'+esc(s.title)+cnt+'</h3>'+extra+pts.map((p)=>ptHtml(p,cfg,s.key==='balance')).join('')+'</div>';
   }).join('');
-  const foot=running?'<div class="cprog">يكتب التقرير… اكتمل '+CMP.ar(S.cmpRun.done)+' من الأجزاء <span class="dots"><i></i><i></i><i></i></span></div>':
+  const foot=running?'':
     '<div class="cfoot">'+(rep.errs&&rep.errs.length?'<span class="err">لم يكتمل بعض الأقسام ('+esc(rep.errs[0])+').</span>':'<span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet</span>')+'<button class="link" data-act="cmpGen">إعادة الإنشاء</button></div>';
-  return (out?'<div class="card">'+out+'</div>':'')+foot;
+  return (running?cmpBar():'')+(out?'<div class="card">'+out+'</div>':'')+foot;
 }
 function rowHtml(r,i,cfg){
   const id=S.cmpScope+':'+i;const open=S.cmpOpen[id];
@@ -707,7 +725,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-06b';
+const APP_VER='2026-11-06c';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
