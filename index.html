@@ -553,7 +553,7 @@ async function cmpGenerate(){
   try{const r=await CMP.report(cfg,ctx,cmpCall,(p)=>{CMP.mergeSections(rep,p);S.cmpRun.done++;saveCM();if(S.view==='cmpr')render();},cmp,(pg)=>{S.cmpRun.pg=pg;cmpTick();});rep.errs=r.errs;}
   catch(e){rep.errs=[e.message||String(e)];}
   delete rep.running;S.cmpRun=null;saveCM();render();
-  toast(rep.errs&&rep.errs.length?'اكتمل التقرير مع نقص في بعض الأقسام':'اكتمل التقرير الشامل');
+  toast(!rep.sections.length?'تعذر إنشاء التقرير، والسبب مكتوب في الصفحة':rep.errs&&rep.errs.length?'اكتمل التقرير مع نقص في بعض الأقسام':'اكتمل التقرير الشامل');
 }
 let cmpTimer=null;
 // شريط التقدم: يُحدَّث كل ثانية دون إعادة رسم الصفحة
@@ -612,6 +612,7 @@ function vCmpRep(cfg,rep){
   if(!secs.length&&!running){
     const est=CMP.estimate(CMP.doc(S.laws,cfg,getCmp(cfg)));
     return '<div class="card cintro"><b>التقرير الشامل</b><p>يقرأ الذكي (Sonnet) النظامين ولائحتيهما كاملة، ثم يكتب: الخلاصة، وما استُجد وما حُذف وما تغيّر، والمدد، وموضوعات النظامين موضوعاً موضوعاً، وميزان الأطراف، والسريان، ومسائل ينتبه لها القاضي، مع رقم كل مادة في الطرفين. ويطابق المواد مطابقة دقيقة في «مادة مادة».</p><small>يُكتب مرة واحدة ويُحفظ · التكلفة التقريبية '+est.usd.toFixed(1)+' دولار · يستغرق بضع دقائق، والتطبيق مفتوح</small>'+
+     (rep&&rep.errs&&rep.errs.length?'<div class="note"><b>تعذر إنشاء التقرير في المحاولة السابقة:</b> <span class="err" style="unicode-bidi:plaintext">'+esc(rep.errs[0])+'</span></div>':'')+
      (U.key?'<button class="btn gold big" data-act="cmpGen">أنشئ التقرير الشامل</button>':'<div class="note"><b>تحتاج مفتاح API:</b> أضفه من الإعدادات. <button class="link" data-tab="set">فتح الإعدادات</button></div>')+'</div>';
   }
   const par=rep&&rep.parties||[];
@@ -725,7 +726,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-06c';
+const APP_VER='2026-11-06d';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){

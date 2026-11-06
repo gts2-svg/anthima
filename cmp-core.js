@@ -217,7 +217,7 @@
     const P = { total: (cmpObj && (cmpObj.B.reg.length || cmpObj.A.reg.length) ? 2 : 1) + 5, done: 0, run: {}, t0: Date.now() };
     const prog = () => { if (onProg) onProg({ total: P.total, done: P.done, run: Object.values(P.run), t0: P.t0 }); };
     let jid = 0;
-    const system = [{ type: 'text', text: RULES }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral', ttl: '1h' } }];
+    const system = [{ type: 'text', text: RULES }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }];
     const run = async (prompt, max) => {
       const id = ++jid; P.run[id] = { t: Date.now(), first: id === 1 }; prog();
       try { return await run0(prompt, max); } finally { delete P.run[id]; P.done++; prog(); }
@@ -265,7 +265,7 @@
     if (part.themes) rep.themes = part.themes; if (part.parties) rep.parties = part.parties;
   }
   async function ask(ctx, history, q, call) {
-    const system = [{ type: 'text', text: RULES + '\n- أنت الآن تجيب عن سؤال القاضي عن الفروق بين النظامين. ابدأ بالجواب مباشرة، واذكر وسوم المواد بين معقوفين داخل الكلام، مثل [قديم م٤٦] و[جديد م٢٠]. إن كان السؤال عن أحد النظامين فقط فأجب منه، واذكر مقابله في الآخر.' }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral', ttl: '1h' } }];
+    const system = [{ type: 'text', text: RULES + '\n- أنت الآن تجيب عن سؤال القاضي عن الفروق بين النظامين. ابدأ بالجواب مباشرة، واذكر وسوم المواد بين معقوفين داخل الكلام، مثل [قديم م٤٦] و[جديد م٢٠]. إن كان السؤال عن أحد النظامين فقط فأجب منه، واذكر مقابله في الآخر.' }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }];
     const messages = [];
     history.slice(-4).forEach((h) => { if (h.q && h.a) { messages.push({ role: 'user', content: h.q }); messages.push({ role: 'assistant', content: h.a }); } });
     messages.push({ role: 'user', content: q });
