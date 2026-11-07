@@ -151,7 +151,6 @@ input,textarea,select{font-size:16px}
 .nums{display:flex;gap:6px}
 .nums button{min-width:46px;height:34px;border-radius:9px;border:0;background:var(--field);color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums;flex:none;padding:0 6px}
 .nums button.cur{background:var(--navy);color:#fff;font-weight:700}
-.nums button.on:not(.cur){box-shadow:inset 0 0 0 2px var(--navy);font-weight:700}
 .nums button.nt{background:var(--gold-soft);color:var(--gold-ink);font-weight:700}
 .chtitle{font-family:var(--text);font-size:22px;color:var(--link);margin:2px 0 0;line-height:1.5}
 .art{display:flex;flex-direction:column;gap:8px;padding:14px 14px;border-radius:16px;border:1.5px solid transparent;background:var(--card);width:100%;text-align:right;color:var(--ink)}
@@ -355,7 +354,7 @@ function goBack(){if(S.depth>0){S.depth--;history.back();}else{location.hash='ho
 window.addEventListener('hashchange',route);
 function route(){
   const h=(location.hash||'#home').slice(1);let m;S.noteEdit=null;
-  if((m=h.match(/^read-([a-z0-9]+)-(\d+)(?:-([0-9_]+))?$/))&&S.laws[m[1]]){S.view='read';S.lawId=m[1];S.chap=+m[2];const c=chaptersOf(m[1])[S.chap];S.sel=m[3]||(c?c.arts[0].n:null);}
+  if((m=h.match(/^read-([a-z0-9]+)-(\d+)(?:-([0-9_]+))?$/))&&S.laws[m[1]]){S.view='read';S.lawId=m[1];S.chap=+m[2];const c=chaptersOf(m[1])[S.chap];S.sel=m[3]||(c?c.arts[0].n:null);S.act=null;}
   else if((m=h.match(/^book-([a-z0-9]+)$/))&&S.laws[m[1]]){S.view='book';S.lawId=m[1];S.tocQ='';}
   else if(['home','saved','cmp','cmpr','ask','set','search'].includes(h))S.view=h;
   else S.view='home';
@@ -397,13 +396,13 @@ function vBook(){
    '<div class="toc">'+toc+'</div></div>';
 }
 function artCard(a){
-  const k=key(a.lawId,a.n),on=S.sel===a.n,sv=!!U.saved[k],note=U.notes[k];
+  const k=key(a.lawId,a.n),on=S.act===a.n,sv=!!U.saved[k],note=U.notes[k];
   const flags=(a.repealed||a.amended||a.added||a.reg)?'<span class="flags">'+(a.repealed?'<span class="flag r">ملغاة</span>':'')+(a.amended?'<span class="flag">معدّلة</span>':'')+(a.added?'<span class="flag">مضافة</span>':'')+(a.reg?'<span class="flag">لها لائحة</span>':'')+'</span>':'';
   const head='<div class="ah"><span class="num'+(on?'':' soft')+'">'+esc(label(a))+'</span><span class="t">'+(a.title?'<b>'+esc(a.title)+'</b>':'')+'<small>'+esc(a.heading||'')+'</small></span>'+(sv?'<span style="color:var(--gold)">'+IC.star+'</span>':'')+'</div>';
   const body=head+flags+'<p>'+esc(a.text)+'</p>'+(a.partialText?'<span class="part">المعروض جزء من المادة فقط.</span>':'')+(a.note?'<span class="part">'+esc(a.note)+'</span>':'');
   if(!on)return '<div class="art" data-an="'+esc(a.n)+'" data-sel="'+esc(a.n)+'" role="button" tabindex="0" aria-label="المادة '+esc(label(a))+'">'+body+(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':'')+'</div>';
   const inC=U.compare.includes(k);
-  return '<div class="art on" id="sel" data-an="'+esc(a.n)+'">'+body+(a.reg&&S.regOpen[k]?'<div class="reg"><b>اللائحة التنفيذية</b>'+esc(a.reg)+'</div>':'')+
+  return '<div class="art on" id="sel" data-an="'+esc(a.n)+'" data-sel="'+esc(a.n)+'">'+body+(a.reg&&S.regOpen[k]?'<div class="reg"><b>اللائحة التنفيذية</b>'+esc(a.reg)+'</div>':'')+
    (S.noteEdit===k?'<textarea class="nt" id="ntx" placeholder="ملاحظتك على هذه المادة">'+esc(note||'')+'</textarea><div class="btns"><button class="btn navy sm" data-act="noteSave">حفظ الملاحظة</button><button class="btn sm" data-act="noteCancel">إلغاء</button></div>':(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':''))+
    '<div class="btns"><button class="btn gold sm" data-act="cite">'+IC.pen+'نسخ للتسبيب</button><button class="btn sm" data-act="copy">'+IC.copy+'نسخ النص</button><button class="btn sm" data-act="save">'+(sv?'محفوظة ✓':'حفظ')+'</button><button class="btn sm" data-act="note">'+(note?'تعديل الملاحظة':'ملاحظة')+'</button>'+(a.reg?'<button class="btn sm" data-act="reg">'+(S.regOpen[k]?'إخفاء اللائحة':'اللائحة')+'</button>':'')+'<button class="btn sm" data-act="cmp">'+(inC?'في المقارنة ✓':'قارن')+'</button></div></div>';
 }
@@ -413,7 +412,7 @@ function vRead(){
   top.className='';top.innerHTML=topBar(L.name,c.part||'',sel?'<button class="ib'+(U.saved[k]?' on':'')+'" data-act="save" aria-label="حفظ المادة">'+(U.saved[k]?IC.star:IC.starO)+'</button>':'');
   const sp=splitChap(c.t);
   return '<div class="rbar">'+(chs.length>1?'<div class="hscroll" id="chs">'+chs.map((ch,i)=>{const s=splitChap(ch.t);return '<button class="chip" data-chap="'+i+'" aria-pressed="'+(i===S.chap)+'">'+esc(s[1].length>30?s[1].slice(0,28)+'…':s[1])+'</button>';}).join('')+'</div>':'')+
-   '<div class="hscroll nums" id="nms">'+c.arts.map((a)=>'<button data-sel="'+esc(a.n)+'" class="'+(a.n===S.sel?'on':(U.notes[key(L.id,a.n)]?'nt':''))+'">'+esc(label(a))+'</button>').join('')+'</div></div>'+
+   '<div class="hscroll nums" id="nms">'+c.arts.map((a)=>'<button data-sel="'+esc(a.n)+'" class="'+(U.notes[key(L.id,a.n)]?'nt':'')+'">'+esc(label(a))+'</button>').join('')+'</div></div>'+
    '<div class="wrap">'+(c.t?'<h2 class="chtitle">'+esc(sp[0]?sp[0]+': '+sp[1]:sp[1])+'</h2>':'')+c.arts.map(artCard).join('')+
    '<div class="pager">'+(S.chap>0?'<button class="btn" data-chap="'+(S.chap-1)+'">→ الباب السابق</button>':'<span></span>')+(S.chap<chs.length-1?'<button class="btn" data-chap="'+(S.chap+1)+'">الباب التالي ←</button>':'')+'</div></div>';
 }
@@ -533,7 +532,7 @@ function render(fresh){
   const tab={home:'home',book:'home',read:'home',search:'home',saved:'saved',cmp:'cmp',cmpr:'cmp',ask:'ask',set:'set'}[S.view];
   document.querySelectorAll('#tabs [data-tab]').forEach((b)=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
   const cc=$('cmpCnt');cc.hidden=!U.compare.length;cc.textContent=U.compare.length;
-  if(fresh){main.scrollTop=0;if(S.view==='read'&&S.sel){requestAnimationFrame(()=>{const el=$('sel');if(el&&S.sel!==chaptersOf(S.lawId)[S.chap].arts[0].n)el.scrollIntoView({block:'start'});centerIn('nms','.on');centerIn('chs','[aria-pressed="true"]');});}}
+  if(fresh){main.scrollTop=0;if(S.view==='read'&&S.sel){requestAnimationFrame(()=>{if(S.sel!==chaptersOf(S.lawId)[S.chap].arts[0].n)scrollToArt(S.sel,false);centerIn('chs','[aria-pressed="true"]');});}}
   else main.scrollTop=keepScroll;
   if(S.view==='read')requestAnimationFrame(()=>requestAnimationFrame(readSpy));
 }
@@ -770,13 +769,14 @@ function cmpPdfShare(){
 document.addEventListener('click',(e)=>{const t=e.target.closest('button');if(t&&t.dataset.act==='cmpPdfShare')cmpPdfShare();});
 
 /* ---------- رقم المادة المقروءة يتحرك مع التمرير ----------
-   المعيار: خط قراءة على ثلث المساحة الظاهرة تحت الشريط الثابت؛ المادة الحالية آخر مادة بدأت قبل هذا الخط.
-   فإن ظهرت مادتان أو ثلاث، فالحالية هي التي تقرأ فيها الآن (عند ثلث الشاشة)، وفي آخر الصفحة تصير الأخيرة. */
+   المعيار: خط قراءة قريب من أعلى المساحة الظاهرة تحت الشريط الثابت؛ المادة الحالية آخر مادة بدأت قبل هذا الخط.
+   فإن ظهرت مادتان أو ثلاث، فالحالية هي التي تقرأ فيها الآن في أعلى الشاشة، وفي آخر الصفحة تصير الأخيرة. */
+function scrollToArt(n,smooth){const el=main.querySelector('.art[data-an="'+CSS.escape(n)+'"]');if(!el)return;const bar=document.querySelector('.rbar');const bh=bar?bar.getBoundingClientRect().bottom-main.getBoundingClientRect().top:0;main.scrollTo({top:el.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop-bh-10,behavior:smooth?'smooth':'auto'});}
 let spyRaf=0;
 function readSpy(){
   spyRaf=0;if(S.view!=='read')return;
   const bar=document.querySelector('.rbar');const nums=$('nms');if(!bar||!nums)return;
-  const mr=main.getBoundingClientRect();const topY=bar.getBoundingClientRect().bottom;const line=topY+(mr.bottom-topY)/3;
+  const mr=main.getBoundingClientRect();const topY=bar.getBoundingClientRect().bottom;const line=topY+Math.min(110,(mr.bottom-topY)/3);
   const cards=[...main.querySelectorAll('.art[data-an]')];if(!cards.length)return;
   let cur=cards[0];for(const c of cards){if(c.getBoundingClientRect().top<=line)cur=c;else break;}
   if(main.scrollTop+main.clientHeight>=main.scrollHeight-4)cur=cards[cards.length-1];
@@ -808,7 +808,8 @@ document.addEventListener('click',(e)=>{
   if(d.book){nav('book-'+d.book);return;}
   if(d.open){const i=d.open.indexOf('-');openArticle(d.open.slice(0,i),d.open.slice(i+1));return;}
   if(d.chap!=null){const c=chaptersOf(S.lawId)[+d.chap];if(c){if(S.view==='book')nav('read-'+S.lawId+'-'+d.chap+'-'+c.arts[0].n);else location.replace('#read-'+S.lawId+'-'+d.chap+'-'+c.arts[0].n);}return;}
-  if(d.sel!=null&&S.view==='read'){S.sel=d.sel;S.noteEdit=null;const a=S.arts[S.lawId].find((x)=>x.n===d.sel);if(a)pushRecent(a);history.replaceState(null,'','#read-'+S.lawId+'-'+S.chap+'-'+d.sel);render();requestAnimationFrame(()=>{const el=$('sel');if(el&&t.closest('#nms'))el.scrollIntoView({block:'start',behavior:'smooth'});centerIn('nms','.on');});return;}
+  if(d.sel!=null&&S.view==='read'&&!t.closest('#nms')){if(e.target.closest('textarea,.reg,input'))return;if(window.getSelection&&String(window.getSelection()))return;S.act=S.act===d.sel?null:d.sel;S.noteEdit=null;if(S.act){S.sel=d.sel;const a=S.arts[S.lawId].find((x)=>x.n===d.sel);if(a)pushRecent(a);history.replaceState(null,'','#read-'+S.lawId+'-'+S.chap+'-'+d.sel);}render();return;}
+  if(d.sel!=null&&S.view==='read'){S.sel=d.sel;S.noteEdit=null;const a=S.arts[S.lawId].find((x)=>x.n===d.sel);if(a)pushRecent(a);history.replaceState(null,'','#read-'+S.lawId+'-'+S.chap+'-'+d.sel);render();requestAnimationFrame(()=>scrollToArt(d.sel,true));return;}
   if(d.qlaw){S.qLaw=d.qlaw;render();return;}
   if(d.uncmp){U.compare=U.compare.filter((k)=>k!==d.uncmp);saveU();render();return;}
   if(d.citek){const a=fromKey(d.citek);if(a)copy(citeText(a),'نُسخت بصيغة التسبيب');return;}
@@ -844,7 +845,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-08c';
+const APP_VER='2026-11-08e';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
