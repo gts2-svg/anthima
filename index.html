@@ -150,7 +150,8 @@ input,textarea,select{font-size:16px}
 .rbar .hscroll{margin:0;padding:0 var(--sr) 0 var(--sl)}
 .nums{display:flex;gap:6px}
 .nums button{min-width:46px;height:34px;border-radius:9px;border:0;background:var(--field);color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums;flex:none;padding:0 6px}
-.nums button.on{background:var(--navy);color:#fff;font-weight:700}
+.nums button.cur{background:var(--navy);color:#fff;font-weight:700}
+.nums button.on:not(.cur){box-shadow:inset 0 0 0 2px var(--navy);font-weight:700}
 .nums button.nt{background:var(--gold-soft);color:var(--gold-ink);font-weight:700}
 .chtitle{font-family:var(--text);font-size:22px;color:var(--link);margin:2px 0 0;line-height:1.5}
 .art{display:flex;flex-direction:column;gap:8px;padding:14px 14px;border-radius:16px;border:1.5px solid transparent;background:var(--card);width:100%;text-align:right;color:var(--ink)}
@@ -258,6 +259,10 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
 .lsr{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:1px;width:100%;padding:10px 14px;border-top:1px solid var(--line2);cursor:pointer}
 .lsr:first-of-type{border-top:0}.lsr .nm{font-size:15px;color:var(--ink);font-weight:600}.lsr small{font-size:12px;color:var(--mut)}
 .lsr:active{background:var(--field)}
+.cexp{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cexp .btn{min-height:46px}
+.rdov{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column}
+.rdbar{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;background:var(--navy);color:#fff}
+.rdbar b{font-size:15px}.rdov iframe{flex:1;border:0;width:100%;background:#fff}
 </style>
 </head>
 <body>
@@ -396,9 +401,9 @@ function artCard(a){
   const flags=(a.repealed||a.amended||a.added||a.reg)?'<span class="flags">'+(a.repealed?'<span class="flag r">ملغاة</span>':'')+(a.amended?'<span class="flag">معدّلة</span>':'')+(a.added?'<span class="flag">مضافة</span>':'')+(a.reg?'<span class="flag">لها لائحة</span>':'')+'</span>':'';
   const head='<div class="ah"><span class="num'+(on?'':' soft')+'">'+esc(label(a))+'</span><span class="t">'+(a.title?'<b>'+esc(a.title)+'</b>':'')+'<small>'+esc(a.heading||'')+'</small></span>'+(sv?'<span style="color:var(--gold)">'+IC.star+'</span>':'')+'</div>';
   const body=head+flags+'<p>'+esc(a.text)+'</p>'+(a.partialText?'<span class="part">المعروض جزء من المادة فقط.</span>':'')+(a.note?'<span class="part">'+esc(a.note)+'</span>':'');
-  if(!on)return '<div class="art" data-sel="'+esc(a.n)+'" role="button" tabindex="0" aria-label="المادة '+esc(label(a))+'">'+body+(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':'')+'</div>';
+  if(!on)return '<div class="art" data-an="'+esc(a.n)+'" data-sel="'+esc(a.n)+'" role="button" tabindex="0" aria-label="المادة '+esc(label(a))+'">'+body+(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':'')+'</div>';
   const inC=U.compare.includes(k);
-  return '<div class="art on" id="sel">'+body+(a.reg&&S.regOpen[k]?'<div class="reg"><b>اللائحة التنفيذية</b>'+esc(a.reg)+'</div>':'')+
+  return '<div class="art on" id="sel" data-an="'+esc(a.n)+'">'+body+(a.reg&&S.regOpen[k]?'<div class="reg"><b>اللائحة التنفيذية</b>'+esc(a.reg)+'</div>':'')+
    (S.noteEdit===k?'<textarea class="nt" id="ntx" placeholder="ملاحظتك على هذه المادة">'+esc(note||'')+'</textarea><div class="btns"><button class="btn navy sm" data-act="noteSave">حفظ الملاحظة</button><button class="btn sm" data-act="noteCancel">إلغاء</button></div>':(note?'<div class="mynote"><b>ملاحظتي:</b> '+esc(note)+'</div>':''))+
    '<div class="btns"><button class="btn gold sm" data-act="cite">'+IC.pen+'نسخ للتسبيب</button><button class="btn sm" data-act="copy">'+IC.copy+'نسخ النص</button><button class="btn sm" data-act="save">'+(sv?'محفوظة ✓':'حفظ')+'</button><button class="btn sm" data-act="note">'+(note?'تعديل الملاحظة':'ملاحظة')+'</button>'+(a.reg?'<button class="btn sm" data-act="reg">'+(S.regOpen[k]?'إخفاء اللائحة':'اللائحة')+'</button>':'')+'<button class="btn sm" data-act="cmp">'+(inC?'في المقارنة ✓':'قارن')+'</button></div></div>';
 }
@@ -530,6 +535,7 @@ function render(fresh){
   const cc=$('cmpCnt');cc.hidden=!U.compare.length;cc.textContent=U.compare.length;
   if(fresh){main.scrollTop=0;if(S.view==='read'&&S.sel){requestAnimationFrame(()=>{const el=$('sel');if(el&&S.sel!==chaptersOf(S.lawId)[S.chap].arts[0].n)el.scrollIntoView({block:'start'});centerIn('nms','.on');centerIn('chs','[aria-pressed="true"]');});}}
   else main.scrollTop=keepScroll;
+  if(S.view==='read')requestAnimationFrame(()=>requestAnimationFrame(readSpy));
 }
 function centerIn(id,sel){const box=$(id);if(!box)return;const el=box.querySelector(sel);if(el)box.scrollLeft=el.offsetLeft-box.clientWidth/2+el.offsetWidth/2;}
 
@@ -679,7 +685,7 @@ function vCmpRep(cfg,rep){
   const miss=running?0:CMP.missing(rep);
   const resumeBox=miss?'<div class="note"><b>بقي '+CMP.parts(miss)+'.</b> المكتمل محفوظ، وهذا يعيد الناقص وحده. <button class="btn gold" data-act="cmpResume">أكمل الناقص</button></div>':'';
   if(!running&&rep.pdf)pdfPrefetch(rep.pdf);
-  const pdfBtn=!running&&rep.pdf?'<button class="btn gold big" data-act="cmpPdfShare">حفظ أو مشاركة التقرير PDF</button><p class="hint">يفتح قائمة المشاركة: «حفظ في الملفات»، أو واتساب، أو البريد، أو «الكتب» للقراءة.</p>':'';
+  const pdfBtn=running?'':'<div class="cexp"><button class="btn gold" data-act="cmpReadRep">قراءة التقرير</button>'+(rep.pdf?'<button class="btn navy" data-act="cmpPdfShare">حفظ أو تحميل PDF</button>':'<button class="btn navy" data-act="cmpDocx">حفظ ملف Word</button>')+'</div>';
   return (running?cmpBar(rep):'')+pdfBtn+resumeBox+(out?'<div class="card">'+out+'</div>':'')+mapNote+foot;
 }
 function rowHtml(r,i,cfg){
@@ -762,6 +768,37 @@ function cmpPdfShare(){
   const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
 }
 document.addEventListener('click',(e)=>{const t=e.target.closest('button');if(t&&t.dataset.act==='cmpPdfShare')cmpPdfShare();});
+
+/* ---------- رقم المادة المقروءة يتحرك مع التمرير ----------
+   المعيار: خط قراءة على ثلث المساحة الظاهرة تحت الشريط الثابت؛ المادة الحالية آخر مادة بدأت قبل هذا الخط.
+   فإن ظهرت مادتان أو ثلاث، فالحالية هي التي تقرأ فيها الآن (عند ثلث الشاشة)، وفي آخر الصفحة تصير الأخيرة. */
+let spyRaf=0;
+function readSpy(){
+  spyRaf=0;if(S.view!=='read')return;
+  const bar=document.querySelector('.rbar');const nums=$('nms');if(!bar||!nums)return;
+  const mr=main.getBoundingClientRect();const topY=bar.getBoundingClientRect().bottom;const line=topY+(mr.bottom-topY)/3;
+  const cards=[...main.querySelectorAll('.art[data-an]')];if(!cards.length)return;
+  let cur=cards[0];for(const c of cards){if(c.getBoundingClientRect().top<=line)cur=c;else break;}
+  if(main.scrollTop+main.clientHeight>=main.scrollHeight-4)cur=cards[cards.length-1];
+  const n=cur.dataset.an;const btns=nums.querySelectorAll('button[data-sel]');let hit=null;
+  btns.forEach((b)=>{const is=b.dataset.sel===n;b.classList.toggle('cur',is);if(is)hit=b;});
+  if(hit&&hit.dataset.spy!=='1'){btns.forEach((b)=>delete b.dataset.spy);hit.dataset.spy='1';const r=hit.getBoundingClientRect(),nr=nums.getBoundingClientRect();if(r.left<nr.left+8||r.right>nr.right-8)nums.scrollTo({left:nums.scrollLeft+(r.left+r.width/2)-(nr.left+nr.width/2),behavior:'smooth'});}
+}
+main.addEventListener('scroll',()=>{if(!spyRaf)spyRaf=requestAnimationFrame(readSpy);},{passive:true});
+
+// قراءة التقرير داخل التطبيق بتنسيق ملف PDF نفسه، في صفحة كاملة لها زر إغلاق وزر حفظ
+function cmpReadRep(){
+  const cfg=cmpCfg(),rep=CM[CMP.key(cfg)];if(!rep)return;
+  const base=new URL('fonts/',location.href).href;
+  let r=CMP.reportHTML(rep,cfg,S.laws,cmpRows(cfg),base).html;
+  r=r.replace('</style>','@media screen{body{padding:18px 16px 60px;font-size:17px;line-height:1.95}.toc{columns:1}.stats{gap:6px}.stat b{font-size:18pt}table{font-size:13px}h1{font-size:22pt}}</style>');
+  let ov=$('rdov');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='rdov';ov.className='rdov';
+  ov.innerHTML='<div class="rdbar"><button class="btn sm" data-act="rdClose">إغلاق</button><b>تقرير المقارنة</b>'+(rep.pdf?'<button class="btn sm gold" data-act="cmpPdfShare">حفظ PDF</button>':'<button class="btn sm gold" data-act="cmpDocx">Word</button>')+'</div><iframe title="تقرير المقارنة"></iframe>';
+  document.body.appendChild(ov);ov.querySelector('iframe').srcdoc=r;
+  if(rep.pdf)pdfPrefetch(rep.pdf);
+}
+document.addEventListener('click',(e)=>{const t=e.target.closest('button');if(!t)return;if(t.dataset.act==='cmpReadRep')cmpReadRep();if(t.dataset.act==='rdClose'){const o=$('rdov');if(o)o.remove();}});
 /* ---------- events ---------- */
 document.addEventListener('click',(e)=>{
   const t=e.target.closest('button,[data-sel]');if(!t)return;const d=t.dataset;
@@ -807,7 +844,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-08b';
+const APP_VER='2026-11-08c';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
