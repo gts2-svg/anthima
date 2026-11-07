@@ -1,5 +1,5 @@
 /* anthima — يحفظ التطبيق داخل الجهاز ليفتح بدون إنترنت، ويجلب أحدث نسخة كلما توفر الاتصال */
-const CACHE = 'anthima-2026-11-07a';
+const CACHE = 'anthima-2026-11-07b';
 const CORE = ['./', 'index.html', 'cmp-core.js', 'manifest.webmanifest', 'laws.json', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -14,7 +14,7 @@ self.addEventListener('fetch', (e) => {
   const same = url.origin === location.origin;
   const font = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
   if (!same && !font) return;
-  const fresh = same && (req.mode === 'navigate' || /\/(index\.html|laws\.json)?$/.test(url.pathname) || url.pathname.endsWith('laws.json'));
+  const fresh = same && (req.mode === 'navigate' || /\/(index\.html|laws\.json)?$/.test(url.pathname) || url.pathname.endsWith('laws.json') || url.pathname.endsWith('cmp-ready.json'));
   e.respondWith(caches.open(CACHE).then(async (c) => {
     const key = same && req.mode === 'navigate' ? './' : (same ? url.pathname.replace(/^.*\//, '') || './' : req);
     if (fresh) {

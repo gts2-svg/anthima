@@ -352,15 +352,28 @@
     if (reg === 'attached' || !reg) return { lawId: law, n: parts[0], reg: true };
     return { lawId: reg, n: parts[0] };
   }
-  function refsHTML(text, cfg) {
-    let out = '', last = 0; const s = String(text); REF.lastIndex = 0; let m;
+  // وسم بين معقوفين قد يجمع عدة مواد أو مدى، مثل [قديم م١، م٢] أو [جديد م٢٠–٢٥]: يُعرض كاملاً ويفتح أول مادة فيه
+  const GROUP = /\[((?:قديم|جديد)[^\[\]]{0,80})\]/g;
+  function chip(cfg, m, label) {
+    const t = resolve(cfg, m[1], !!m[2], !!m[3], m[4]);
+    return '<button class="cref ' + (m[1] === 'قديم' ? 'o' : 'n') + '" data-cref="' + esc(t.lawId + '|' + t.n) + '">' + esc(label.replace(/\s+/g, ' ').trim()) + '</button>';
+  }
+  function bare(s, cfg) {
+    let out = '', last = 0; REF.lastIndex = 0; let m;
     while ((m = REF.exec(s))) {
       out += esc(s.slice(last, m.index)); last = m.index + m[0].length;
-      const t = resolve(cfg, m[1], !!m[2], !!m[3], m[4]);
-      const lab = m[1] + ' ' + (m[2] ? 'لائحة ' : '') + (m[3] || (!m[2] ? 'م' : '')) + ar(en(m[4]).replace(/\s+/g, ''));
-      out += '<button class="cref ' + (m[1] === 'قديم' ? 'o' : 'n') + '" data-cref="' + esc(t.lawId + '|' + t.n) + '">' + esc(lab.replace(/\s+/g, ' ')) + '</button>';
+      out += chip(cfg, m, m[1] + ' ' + (m[2] ? 'لائحة ' : '') + (m[3] || (!m[2] ? 'م' : '')) + ar(en(m[4]).replace(/\s+/g, '')));
     }
     return out + esc(s.slice(last));
+  }
+  function refsHTML(text, cfg) {
+    const s = String(text); let out = '', last = 0, g; GROUP.lastIndex = 0;
+    while ((g = GROUP.exec(s))) {
+      REF.lastIndex = 0; const m = REF.exec('[' + g[1] + ']'); if (!m) continue;
+      out += bare(s.slice(last, g.index), cfg); last = g.index + g[0].length;
+      out += chip(cfg, m, ar(g[1]));
+    }
+    return out + bare(s.slice(last), cfg);
   }
   // التقدم الحقيقي: يُقاس بما كُتب فعلاً من كل جزء مقابل حجمه المتوقع
   function progress(rep) {

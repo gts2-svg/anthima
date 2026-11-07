@@ -251,6 +251,7 @@ html.short #tabs button{min-height:46px;justify-content:flex-end;padding-bottom:
 .cwr{font-size:11.5px;color:var(--gold-ink);font-weight:600;margin-inline-start:auto}
 .cbad{font-size:12.5px;color:var(--danger);line-height:1.7;margin-top:6px}
 .note.ok{background:var(--ok-soft);border-color:transparent}.note.ok b{color:var(--ok)}
+.cpdf{display:flex;align-items:center;justify-content:center;text-decoration:none}
 </style>
 </head>
 <body>
@@ -528,6 +529,8 @@ function centerIn(id,sel){const box=$(id);if(!box)return;const el=box.querySelec
 /* ---------- مقارنة نظامين ---------- */
 const CM=ls('anz_cmp')||{};
 Object.keys(CM).forEach((k)=>{const r=CM[k];if(r.sections&&!r.specs){delete r.sections;delete r.errs;delete r.map;}delete r.running;Object.values(r.secs||{}).forEach((s)=>{if(s.state==='run'){s.state=s.text?'cut':'err';s.err=s.err||'انقطع قبل أن يكتمل';delete s.t;}});(r.chat||[]).forEach((m)=>{if(m.wait){delete m.wait;if(!m.a)m.err='انقطع قبل أن يكتمل';}});});
+// مقارنات جاهزة تُنشر مع التطبيق (كُتبت في البرنامج)، تُضاف إن لم يكن عندك تقرير مكتمل لها
+fetch('cmp-ready.json',{cache:'no-cache'}).then((r)=>r.ok?r.json():{}).then((d)=>{let ch=0;Object.keys(d||{}).forEach((k)=>{const r=d[k],o=CM[k];const done=(x)=>x&&x.specs&&x.specs.length>1&&!(x.specs||[]).some((sp)=>!x.secs[sp.key]||x.secs[sp.key].state!=='ok');if(!done(o)||(o.ready&&o.at<r.at)){CM[k]=Object.assign({},r,{ready:true,chat:o&&o.chat||[]});ch++;}else if(o&&r.pdf&&!o.pdf){o.pdf=r.pdf;ch++;}});if(ch){saveCM(true);if(S.view==='cmp'||S.view==='cmpr')render();}}).catch(()=>{});
 let cmSaveT=0;
 function saveCM(now){clearTimeout(cmSaveT);const w=()=>{try{localStorage.setItem('anz_cmp',JSON.stringify(CM));}catch(e){toast('تعذر حفظ التقرير في ذاكرة الجهاز');}};if(now)w();else cmSaveT=setTimeout(w,1500);}
 S.cmpSeg=S.cmpSeg||'laws';S.cmpTab='rep';S.cmpScope='law';S.cmpSt='all';S.cmpLimit=40;S.cmpOpen={};S.cmpDiff={};S.cmpRun=null;S.cmpAsking=false;S.cmpTest=null;
@@ -665,10 +668,11 @@ function vCmpRep(cfg,rep){
   }).join('');
   const maps=(rep.specs||[]).filter((sp)=>sp.kind==='map'||sp.kind==='removed');const mbad=maps.filter((sp)=>rep.secs[sp.key]&&/err|cut/.test(rep.secs[sp.key].state));
   const mapNote=!running&&mbad.length?'<div class="cbad">'+CMP.ar(mbad.length)+' من أجزاء مطابقة المواد لم تكتمل، فبعض المواد في «مادة مادة» بلا مطابقة. '+mbad.map((sp)=>'<button class="link" data-cretry="'+sp.key+'">أعد «'+esc(sp.title)+'»</button>').join(' ')+'</div>':'';
-  const foot=running?'':'<div class="cfoot"><span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet 5.5</span><span><button class="link" data-act="cmpDocx">ملف Word</button> · <button class="link" data-act="cmpGen">إعادة الإنشاء</button></span></div>';
+  const foot=running?'':'<div class="cfoot"><span>كُتب '+new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab',{day:'numeric',month:'long',year:'numeric'})+' بـ Sonnet 5.5</span><span>'+(rep.pdf?'<a class="link" href="'+esc(rep.pdf)+'" target="_blank" rel="noopener">ملف PDF</a> · ':'')+'<button class="link" data-act="cmpDocx">ملف Word</button> · <button class="link" data-act="cmpGen">إعادة الإنشاء</button></span></div>';
   const miss=running?0:CMP.missing(rep);
   const resumeBox=miss?'<div class="note"><b>بقي '+CMP.parts(miss)+'.</b> المكتمل محفوظ، وهذا يعيد الناقص وحده. <button class="btn gold" data-act="cmpResume">أكمل الناقص</button></div>':'';
-  return (running?cmpBar(rep):'')+resumeBox+(out?'<div class="card">'+out+'</div>':'')+mapNote+foot;
+  const pdfBtn=!running&&rep.pdf?'<a class="btn gold big cpdf" href="'+esc(rep.pdf)+'" target="_blank" rel="noopener">فتح التقرير PDF</a>':'';
+  return (running?cmpBar(rep):'')+pdfBtn+resumeBox+(out?'<div class="card">'+out+'</div>':'')+mapNote+foot;
 }
 function rowHtml(r,i,cfg){
   const id=S.cmpScope+':'+i;const open=S.cmpOpen[id];
@@ -773,7 +777,7 @@ document.addEventListener('input',(e)=>{
 });
 
 /* ---------- boot ---------- */
-const APP_VER='2026-11-07a';
+const APP_VER='2026-11-07b';
 /* iOS home-screen apps can report a viewport shorter than the screen (by the status-bar height), leaving a strip under the tab bar.
    When that happens, size the shell to the full screen instead. */
 function fitShell(){
