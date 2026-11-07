@@ -260,38 +260,61 @@
   }
   function sysOf(ctx) { return [{ type: 'text', text: RULES }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }]; }
   // call({tier, system, messages, max, onText}) => {text, stop, usage}
+  // Sonnet 5.5 يفكر قبل الكتابة افتراضياً، والتفكير يُحسب من حد الطول؛ فالأقسام التحليلية بتفكير متوسط وحد واسع،
+  // وجداول المطابقة بلا تفكير مسبق. وانقطاع الاتصال يُعاد معه الجزء حتى مرتين.
+  const MODE = { sec: { max: 32000, thinking: { type: 'adaptive', display: 'summarized' }, effort: 'medium' }, map: { max: 16000, thinking: { type: 'between_tools' }, effort: 'medium' } };
+  const NETERR = /load failed|failed to fetch|network|net::|انقطع|overloaded|\b(500|502|503|504|529)\b|تعذر الاتصال|ECONN|socket|timeout/i;
   async function runSpec(rep, sp, ctx, call, onUpdate) {
-    const s = rep.secs[sp.key] = { text: '', state: 'run', t: Date.now() };
-    try {
-      const r = await call({ tier: 'strong', system: sysOf(ctx), messages: [{ role: 'user', content: prompt(sp) }], max: sp.kind === 'sec' ? 6000 : 8000, onText: (t) => { s.text = t; onUpdate(); } });
-      s.text = r.text || s.text; s.stop = r.stop || '';
-      s.state = !String(s.text).trim() ? 'err' : (r.stop === 'max_tokens' ? 'cut' : 'ok');
-      if (s.state === 'err') s.err = 'وصل رد فارغ' + (r.stop ? ' (' + r.stop + ')' : '');
-    } catch (e) { s.state = s.text ? 'cut' : 'err'; s.err = String(e && e.message || e); }
+    const md = sp.kind === 'sec' || sp.kind === 'plan' ? MODE.sec : MODE.map;
+    let s;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      s = rep.secs[sp.key] = { text: '', think: 0, state: 'run', t: Date.now(), tries: attempt + 1 };
+      try {
+        const r = await call(Object.assign({ tier: 'strong', system: sysOf(ctx), messages: [{ role: 'user', content: prompt(sp) }], onText: (t) => { s.text = t; onUpdate(); }, onThink: (n) => { s.think = n; onUpdate(); } }, md));
+        s.text = r.text || s.text; s.stop = r.stop || '';
+        s.state = !String(s.text).trim() ? 'err' : (r.stop === 'max_tokens' ? 'cut' : 'ok');
+        if (s.state === 'err') s.err = 'وصل رد فارغ' + (r.stop ? ' (' + r.stop + ')' : '');
+      } catch (e) { s.state = 'err'; s.err = String(e && e.message || e); }
+      if (s.state === 'err' && NETERR.test(s.err) && attempt < 2) { onUpdate(true); await new Promise((r) => setTimeout(r, 3000 * (attempt + 1))); continue; }
+      break;
+    }
     s.dur = (Date.now() - s.t) / 1000; delete s.t; onUpdate(true);
     return s;
   }
-  async function report(rep, ctx, call, cmp, onUpdate) {
+  async function report(rep, ctx, call, cmp, onUpdate, conc) {
     rep.secs = rep.secs || {}; rep.t0 = Date.now();
     // ١) خطة قصيرة: الموضوعات والطرفان (ويُحفظ معها نص النظامين عند الخادم للطلبات التالية)
     rep.specs = [{ kind: 'plan', key: 'plan', title: 'قراءة النظامين', w: 3500 }];
     onUpdate(true);
-    const ps = rep.secs.plan = { text: '', state: 'run', t: Date.now() };
+    let ps;
+    for (let attempt = 0; ; attempt++) {
+    ps = rep.secs.plan = { text: '', state: 'run', t: Date.now(), tries: attempt + 1 };
     try {
-      const r = await call({ tier: 'strong', system: sysOf(ctx), messages: [{ role: 'user', content: 'اكتب سطرين فقط بهذا الشكل حرفياً:\nالموضوعات: موضوع؛ موضوع؛ موضوع\nالطرفان: الأول؛ الثاني\nالموضوعات هي الموضوعات الكبرى التي يعالجها النظامان (من ٤ إلى ٨، بعنوان قصير لكل موضوع، مثل: الاختصاص وصلاحيات القاضي؛ الحجز والإفصاح عن الأموال). والطرفان هما من تتوزع بينهما المصالح في النظامين (مثل: الدائن؛ المدين).' }], max: 600, onText: (t) => { ps.text = t; onUpdate(); } });
-      ps.text = r.text || ps.text; ps.state = 'ok';
-    } catch (e) { ps.state = 'err'; ps.err = String(e && e.message || e); delete ps.t; onUpdate(true); throw e; }
+      const r = await call({ tier: 'strong', thinking: MODE.map.thinking, effort: 'medium', system: sysOf(ctx), messages: [{ role: 'user', content: 'اكتب سطرين فقط بهذا الشكل حرفياً:\nالموضوعات: موضوع؛ موضوع؛ موضوع\nالطرفان: الأول؛ الثاني\nالموضوعات هي الموضوعات الكبرى التي يعالجها النظامان (من ٤ إلى ٨، بعنوان قصير لكل موضوع، مثل: الاختصاص وصلاحيات القاضي؛ الحجز والإفصاح عن الأموال). والطرفان هما من تتوزع بينهما المصالح في النظامين (مثل: الدائن؛ المدين).' }], max: 4000, onText: (t) => { ps.text = t; onUpdate(); } });
+      ps.text = r.text || ps.text; ps.state = 'ok'; break;
+    } catch (e) { const m = String(e && e.message || e); if (NETERR.test(m) && attempt < 2) { await new Promise((r) => setTimeout(r, 3000 * (attempt + 1))); continue; } ps.state = 'err'; ps.err = m; delete ps.t; onUpdate(true); throw e; }
+    }
     delete ps.t;
     const line = (k) => ((ps.text.match(new RegExp(k + '\\s*[:：]\\s*(.+)')) || [])[1] || '').split(/[؛;،,]/).map((x) => x.replace(/[*.]/g, '').trim()).filter(Boolean);
     rep.themes = line('الموضوعات').slice(0, 8); const pr = line('الطرفان'); rep.parties = pr.length >= 2 ? pr.slice(0, 2) : ['الطرف الأول', 'الطرف الثاني'];
     rep.specs = rep.specs.concat(specs(rep, cmp)); onUpdate(true);
-    // ٢) بقية الأقسام، أربعة في وقت واحد
-    const todo = rep.specs.filter((sp) => sp.kind !== 'plan');
+    // ٢) بقية الأقسام، عدة أجزاء في وقت واحد
+    await runAll(rep, rep.specs.filter((sp) => sp.kind !== 'plan'), ctx, call, onUpdate, conc);
+  }
+  async function runAll(rep, todo, ctx, call, onUpdate, conc) {
     let k = 0;
     const worker = async () => { while (k < todo.length) { const sp = todo[k++]; await runSpec(rep, sp, ctx, call, onUpdate); } };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: Math.max(1, conc || 3) }, worker));
     rep.map = mapOf(rep);
   }
+  // يكمل الأجزاء الناقصة وحدها: المتعذرة والمنقطعة وما لم يبدأ
+  async function resume(rep, ctx, call, cmp, onUpdate, conc) {
+    rep.t0 = Date.now();
+    const todo = (rep.specs || []).filter((sp) => sp.kind !== 'plan' && (!rep.secs[sp.key] || rep.secs[sp.key].state !== 'ok'));
+    todo.forEach((sp) => { delete rep.secs[sp.key]; });
+    await runAll(rep, todo, ctx, call, onUpdate, conc);
+  }
+  const missing = (rep) => (rep && rep.specs ? rep.specs.filter((sp) => sp.kind !== 'plan' && (!rep.secs[sp.key] || /err|cut/.test(rep.secs[sp.key].state))).length : 0);
   async function retry(rep, key, ctx, call, cmp, onUpdate) {
     const sp = (rep.specs || []).find((x) => x.key === key); if (!sp) return;
     await runSpec(rep, sp, ctx, call, onUpdate); rep.map = mapOf(rep);
@@ -301,20 +324,20 @@
     const pick = (id) => (arts[id] || []).slice(0, 4).map((a) => a.text.slice(0, 500));
     const ctx = 'النظام القديم: ' + (laws[cfg.oLaw] || {}).name + '\n' + pick(cfg.oLaw).map((t, i) => '[قديم م' + ar(i + 1) + '] ' + t).join('\n') + '\n\nالنظام الجديد: ' + (laws[cfg.nLaw] || {}).name + '\n' + pick(cfg.nLaw).map((t, i) => '[جديد م' + ar(i + 1) + '] ' + t).join('\n');
     const t0 = Date.now(); let chunks = 0;
-    const r = await call({ tier: 'strong', system: RULES, messages: [{ role: 'user', content: 'هذه أول أربع مواد من كل نظام:\n' + ctx + '\n\nاكتب القسم الآتي: «الخلاصة» في ثلاث نقاط قصيرة فقط.' + FMT('الخلاصة') }], max: 700, onText: () => { chunks++; } });
+    const r = await call({ tier: 'strong', system: RULES, messages: [{ role: 'user', content: 'هذه أول أربع مواد من كل نظام:\n' + ctx + '\n\nاكتب القسم الآتي: «الخلاصة» في ثلاث نقاط قصيرة فقط.' + FMT('الخلاصة') }], max: 6000, thinking: MODE.map.thinking, effort: 'medium', onText: () => { chunks++; } });
     const sec = parseSec(r.text);
     return { ok: sec.points.length > 0, secs: (Date.now() - t0) / 1000, streamed: chunks > 1, stop: r.stop, points: sec.points.length, sample: sec.points[0] ? sec.points[0].text : String(r.text || '').slice(0, 200) };
   }
   // الأقسام المكتوبة بترتيبها، للعرض
   function sections(rep) {
-    return (rep.specs || []).filter((sp) => sp.kind === 'sec').map((sp) => { const s = (rep.secs || {})[sp.key] || {}; const p = parseSec(s.text); return { key: sp.key, title: sp.title, points: p.points, state: s.state || 'wait', err: s.err || '' }; });
+    return (rep.specs || []).filter((sp) => sp.kind === 'sec').map((sp) => { const s = (rep.secs || {})[sp.key] || {}; const p = parseSec(s.text); return { key: sp.key, title: sp.title, points: p.points, state: s.state || 'wait', err: s.err || '', thinking: s.state === 'run' && !s.text, tries: s.tries || 1 }; });
   }
   async function ask(ctx, history, q, call, onText) {
     const system = [{ type: 'text', text: RULES + '\n- أنت الآن تجيب عن سؤال القاضي عن الفروق بين النظامين. ابدأ بالجواب مباشرة، واذكر وسوم المواد بين معقوفين داخل الكلام. إن كان السؤال عن أحد النظامين فقط فأجب منه، واذكر مقابله في الآخر.' }, { type: 'text', text: ctx, cache_control: { type: 'ephemeral' } }];
     const messages = [];
     history.slice(-4).forEach((h) => { if (h.q && h.a) { messages.push({ role: 'user', content: h.q }); messages.push({ role: 'assistant', content: h.a }); } });
     messages.push({ role: 'user', content: q });
-    const r = await call({ tier: 'strong', system, messages, max: 3000, onText });
+    const r = await call({ tier: 'strong', system, messages, max: 24000, thinking: { type: 'adaptive', display: 'summarized' }, effort: 'medium', onText });
     const t = String(r.text || '').trim(); if (!t) throw new Error('وصل رد فارغ' + (r.stop ? ' (' + r.stop + ')' : ''));
     return t;
   }
@@ -347,7 +370,7 @@
     rep.specs.forEach((sp) => {
       const s = (rep.secs || {})[sp.key]; W += sp.w;
       if (!s) return;
-      if (s.state === 'run') { const got = s.text.length; written += got; D += sp.w * Math.min(0.97, got / sp.w + (sp.kind === 'plan' ? Math.min(0.6, (now - s.t) / 60000) : 0)); }
+      if (s.state === 'run') { const got = s.text.length + 0.15 * (s.think || 0); written += got; D += sp.w * Math.min(0.97, got / sp.w + (sp.kind === 'plan' ? Math.min(0.6, (now - s.t) / 60000) : 0)); }
       else { D += sp.w; done++; written += (s.text || '').length; }
     });
     if (!planned) W += 50000; // قبل معرفة الأجزاء: تقدير لمجموعها
@@ -355,9 +378,11 @@
     const el = (now - rep.t0) / 1000;
     let rem = 'يقدّر الوقت…';
     if (planned && D > 4000 && el > 20) { const rate = D / el; const s = (W - D) / rate; const m = Math.round(s / 60); rem = s < 60 ? 'باقي أقل من دقيقة' : m <= 1 ? 'باقي نحو دقيقة' : m === 2 ? 'باقي نحو دقيقتين' : 'باقي نحو ' + ar(m) + (m <= 10 ? ' دقائق' : ' دقيقة'); }
-    return { pc, done, total: rep.specs.length, rem, writing: rep.specs.filter((sp) => rep.secs[sp.key] && rep.secs[sp.key].state === 'run').map((sp) => sp.title) };
+    return { pc, done, total: rep.specs.length, rem, writing: rep.specs.filter((sp) => rep.secs[sp.key] && rep.secs[sp.key].state === 'run').map((sp) => sp.title), thinking: rep.specs.some((sp) => rep.secs[sp.key] && rep.secs[sp.key].state === 'run' && !rep.secs[sp.key].text && rep.secs[sp.key].think) };
   }
-  function estimate(ctx) { const tok = ctx.length / 2.4; return { tok: Math.round(tok), usd: (tok * 3.75e-6 + 20 * tok * 0.3e-6 + 20 * 1500 * 15e-6) }; }
+  function estimate(ctx) { const tok = ctx.length / 2.4; return { tok: Math.round(tok), usd: (tok * 1.3 * 3.75e-6 + 20 * tok * 1.3 * 0.1e-6 + 20 * 4000 * 15e-6) }; }
+  // «جزء واحد ناقص» و«جزآن ناقصان» و«٣ أجزاء ناقصة» و«١١ جزءاً ناقصاً»
+  function parts(n) { return n === 1 ? 'جزء واحد ناقص' : n === 2 ? 'جزآن ناقصان' : n <= 10 ? ar(n) + ' أجزاء ناقصة' : ar(n) + ' جزءاً ناقصاً'; }
   function key(cfg) { return [cfg.oLaw, cfg.oReg || '-', cfg.nLaw, cfg.nReg || '-'].join('|'); }
 
   /* ---------- ملف Word ----------
@@ -414,5 +439,5 @@
     ]);
   }
 
-  G.CMP = { norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
+  G.CMP = { parts, resume, missing, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
 })(typeof window !== 'undefined' ? window : globalThis);
