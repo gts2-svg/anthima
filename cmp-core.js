@@ -536,5 +536,25 @@
     return { html, header, footer };
   }
 
-  G.CMP = { reportHTML, parts, resume, missing, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
+  /* ---------- البحث باسم النظام ----------
+     «تجاري» أو «المرافعات» أو «لائحة التنفيذ» تقترح الأنظمة التي في اسمها هذه الكلمات */
+  const NSTOP = new Set(['نظام', 'لنظام', 'النظام', 'و', 'في', 'من']);
+  const ntok = (s) => norm(String(s).replace(/\(.*?\)/g, ' ').replace(/—.*$/, '')).split(' ').map((w) => w.replace(/^(وال|بال|فال|لل|ال)(?=..)/, '')).filter((w) => w.length > 1 && !NSTOP.has(w) && !/^\d+$/.test(w));
+  function lev(a, b) { const m = a.length, n = b.length; if (Math.abs(m - n) > 1) return 2; const d = Array.from({ length: m + 1 }, (x, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
+  function lawMatch(laws, ids, q, max) {
+    const qt = ntok(q); if (!qt.length) return [];
+    const out = [];
+    ids.forEach((id) => {
+      const L = laws[id]; if (!L) return; const nt = ntok(L.name); let sc = 0;
+      for (const t of qt) {
+        let b = 0;
+        for (const w of nt) { const v = w === t ? 3 : (w.startsWith(t) && t.length >= 2) ? 2.2 : (t.length >= 3 && (w.indexOf(t) >= 0 || t.startsWith(w) && w.length >= 4)) ? 1.6 : (t.length >= 4 && lev(w, t) <= 1) ? 1.2 : 0; if (v > b) b = v; }
+        if (!b) return; sc += b;
+      }
+      out.push({ id, sc: sc - nt.length * 0.05 });
+    });
+    return out.sort((a, b) => b.sc - a.sc).slice(0, max || 6).map((x) => x.id);
+  }
+
+  G.CMP = { lawMatch, reportHTML, parts, resume, missing, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
 })(typeof window !== 'undefined' ? window : globalThis);
