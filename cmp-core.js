@@ -452,5 +452,89 @@
     ]);
   }
 
-  G.CMP = { parts, resume, missing, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
+  /* ---------- تقرير PDF ----------
+     صفحة HTML مطبوعة بتنسيق A4؛ يحوّلها البرنامج إلى PDF، وخطوطها من مجلد الخطوط (fontBase). */
+  function reportHTML(rep, cfg, laws, rows, fontBase) {
+    const F = (n) => fontBase + n;
+    // الوسوم بين معقوفين: [قديم …] ذهبي، [جديد …] أزرق
+    const tags = (t) => esc(t).replace(/\[([^\]]+)\]/g, (m, x) => '<span class="tg ' + (/^\s*جديد/.test(x) ? 'n' : /^\s*قديم/.test(x) ? 'o' : 'x') + '">' + x + '</span>');
+    const nm = (id) => (laws[id] || {}).name;
+    const secs = sections(rep).filter((s) => s.points.length);
+    const date = new Date(rep.at).toLocaleDateString('ar-SA-u-ca-gregory-nu-arab', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hdate = new Date(rep.at).toLocaleDateString('ar-SA-u-ca-islamic-umalqura-nu-arab', { day: 'numeric', month: 'long', year: 'numeric' });
+    const c = rows.c.all; const par = rep.parties || [];
+    const secHtml = secs.map((s, i) => {
+      let extra = '';
+      if (s.key === 'balance' && par.length === 2) {
+        const a = s.points.filter((p) => p.favors && par[0].indexOf(p.favors) >= 0 || p.favors === par[0]).length, b = s.points.filter((p) => p.favors && (par[1].indexOf(p.favors) >= 0 || p.favors === par[1])).length, m = s.points.filter((p) => p.favors === 'متوازن').length, t = Math.max(1, a + b + m);
+        extra = '<div class="bal"><i style="width:' + (a / t * 100) + '%;background:#123c63"></i><i style="width:' + (m / t * 100) + '%;background:#cfd8e3"></i><i style="width:' + (b / t * 100) + '%;background:#b8892b"></i></div><div class="bl"><span>لصالح ' + esc(par[0]) + ': ' + ar(a) + '</span><span>متوازن: ' + ar(m) + '</span><span>لصالح ' + esc(par[1]) + ': ' + ar(b) + '</span></div>';
+      }
+      return '<section><h2 id="s' + i + '"><span class="no">' + ar(i + 1) + '</span>' + esc(s.title) + '</h2>' + extra + '<ol>' + s.points.map((p) => '<li>' + (p.favors ? '<span class="fav' + (p.favors === 'متوازن' ? ' m' : (par[1] && (par[1].indexOf(p.favors) >= 0 || p.favors === par[1])) ? ' d' : '') + '">' + esc(p.favors === 'متوازن' ? 'متوازن' : 'لصالح ' + p.favors) + '</span> ' : '') + tags(p.text) + '</li>').join('') + '</ol></section>';
+    }).join('');
+    const st = { mod: ['معدّلة', 'mod'], del: ['لا مقابل لها', 'del'], new: ['جديدة', 'new'], same: ['كما هي', 'same'] };
+    const tr = (list, title) => '<h3 class="tt">' + title + '</h3><table><thead><tr><th style="width:15%">المادة الجديدة</th><th style="width:20%">مقابلها في القديم</th><th style="width:11%">الحالة</th><th>ما تغيّر</th></tr></thead><tbody>' +
+      list.map((r) => '<tr><td>' + (r.n ? '<span class="tg n">' + esc(r.n.ref) + '</span>' : '—') + '</td><td>' + ((r.os || (r.o ? [r.o] : [])).map((o) => '<span class="tg o">' + esc(o.ref) + '</span>').join(' ') || '—') + '</td><td><span class="st ' + st[r.st][1] + '">' + st[r.st][0] + '</span></td><td>' + tags(r.note || '') + '</td></tr>').join('') + '</tbody></table>';
+    const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
+    @font-face{font-family:Naskh;src:url(${F('noto-naskh-arabic-arabic-400-normal.woff2')})}
+    @font-face{font-family:Naskh;font-weight:700;src:url(${F('noto-naskh-arabic-arabic-700-normal.woff2')})}
+    @font-face{font-family:Plex;src:url(${F('ibm-plex-sans-arabic-arabic-400-normal.woff2')})}
+    @font-face{font-family:Plex;font-weight:600;src:url(${F('ibm-plex-sans-arabic-arabic-600-normal.woff2')})}
+    @font-face{font-family:Plex;font-weight:700;src:url(${F('ibm-plex-sans-arabic-arabic-700-normal.woff2')})}
+    @font-face{font-family:Plex;src:url(${F('ibm-plex-sans-arabic-latin-400-normal.woff2')});unicode-range:U+0000-00FF}
+    @page{size:A4;margin:22mm 18mm 20mm}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Naskh,serif;font-size:12.5pt;line-height:2;color:#1b2430;text-align:justify}
+    .cover{border-bottom:3px solid #b8892b;padding-bottom:14px;margin-bottom:18px;text-align:center}
+    .kick{font-family:Plex;font-size:10pt;color:#8a6418;letter-spacing:0;font-weight:600}
+    h1{font-family:Plex;font-weight:700;font-size:24pt;color:#123c63;margin:4px 0 6px;line-height:1.4}
+    .laws{font-family:Plex;font-weight:600;font-size:13pt;line-height:1.7}
+    .laws .a{color:#8a6418}.laws .b{color:#123c63}.laws .ar{color:#8b97a5;margin:0 8px}
+    .meta{font-family:Plex;font-size:9.5pt;color:#5d6a78;margin-top:6px}
+    .stats{display:flex;gap:8px;margin:16px 0 10px}
+    .stat{flex:1;border:1px solid #e3e8ef;border-radius:10px;padding:8px 4px;text-align:center;font-family:Plex}
+    .stat b{display:block;font-size:20pt;line-height:1.2}.stat span{font-size:9pt;color:#5d6a78}
+    .stat.mod b{color:#8a6418}.stat.del b{color:#a3312a}.stat.new b{color:#1f6b52}.stat.same b{color:#5d6a78}
+    .warn{font-family:Plex;font-size:9pt;color:#5d6a78;background:#f5f6f8;border-radius:8px;padding:7px 12px;line-height:1.7;text-align:right}
+    .toc{margin:16px 0 0;font-family:Plex;font-size:10.5pt;columns:2;column-gap:28px;line-height:2}
+    .toc a{color:#123c63;text-decoration:none}.toc span{color:#b8892b;margin-left:6px;font-weight:700}
+    section{margin-top:18px}
+    h2{font-family:Plex;font-weight:700;font-size:15pt;color:#123c63;margin:0 0 6px;padding-bottom:4px;border-bottom:1px solid #e3e8ef;break-after:avoid;display:flex;align-items:center;gap:8px}
+    h2 .no{display:inline-grid;place-items:center;min-width:24px;height:24px;border-radius:7px;background:#123c63;color:#fff;font-size:11pt}
+    ol{margin:0;padding:0 22px 0 0;list-style:arabic-indic}
+    li{margin:0 0 6px;padding-right:4px;break-inside:avoid}
+    li::marker{color:#b8892b;font-family:Plex;font-weight:700;font-size:10.5pt}
+    .tg{font-family:Plex;font-size:8.6pt;font-weight:600;border-radius:5px;padding:0 5px;margin:0 1px;white-space:nowrap;vertical-align:1px;line-height:1.6}
+    .tg.o{background:#fbf4e4;color:#8a6418}.tg.n{background:#eaf0f7;color:#123c63}.tg.x{background:#f1f4f8;color:#5d6a78}
+    .fav{font-family:Plex;font-size:8.6pt;font-weight:700;border-radius:5px;padding:0 6px;background:#123c63;color:#fff;white-space:nowrap}
+    .fav.d{background:#b8892b}.fav.m{background:#cfd8e3;color:#1b2430}
+    .bal{display:flex;height:9px;border-radius:5px;overflow:hidden;margin:8px 0 4px}.bal i{display:block}
+    .bl{display:flex;justify-content:space-between;font-family:Plex;font-size:9pt;color:#5d6a78;margin-bottom:8px}
+    .mapsec{break-before:page}
+    h3.tt{font-family:Plex;font-size:12pt;color:#123c63;margin:14px 0 6px}
+    table{width:100%;border-collapse:collapse;font-size:10pt;line-height:1.7}
+    thead{display:table-header-group}
+    th{font-family:Plex;font-weight:700;font-size:9pt;background:#eaf0f7;color:#123c63;padding:5px 6px;text-align:right;border:1px solid #d6e0eb}
+    td{padding:5px 6px;border:1px solid #e3e8ef;vertical-align:top;text-align:right}
+    tr{break-inside:avoid}
+    tbody tr:nth-child(even) td{background:#fafbfc}
+    .st{font-family:Plex;font-size:8.6pt;font-weight:700;border-radius:5px;padding:1px 6px;white-space:nowrap}
+    .st.mod{background:#fbf4e4;color:#8a6418}.st.del{background:#fbeceb;color:#a3312a}.st.new{background:#ecf5f1;color:#1f6b52}.st.same{background:#f1f4f8;color:#5d6a78}
+    </style></head><body>
+    <div class="cover"><div class="kick">تقرير مقارنة بين نظامين</div><h1>المقارنة الشاملة</h1>
+    <div class="laws"><span class="a">${esc(nm(cfg.oLaw))}</span><span class="ar">←</span><span class="b">${esc(nm(cfg.nLaw))}</span></div>
+    <div class="meta">مع ${cfg.oReg === 'attached' ? 'لائحته التنفيذية' : esc(nm(cfg.oReg) || '')} · و${esc(nm(cfg.nReg) || '')}<br>كُتب في ${hdate} الموافق ${date}</div></div>
+    <div class="stats"><div class="stat mod"><b>${ar(c.mod)}</b><span>معدّلة</span></div><div class="stat del"><b>${ar(c.del)}</b><span>لا مقابل لها</span></div><div class="stat new"><b>${ar(c.new)}</b><span>جديدة</span></div><div class="stat same"><b>${ar(c.same)}</b><span>كما هي</span></div></div>
+    <div class="warn">تحليل آلي كتبه الذكي (Sonnet 5.5) من نصوص النظامين ولائحتيهما المحفوظة في التطبيق؛ يُرجع إلى نص المادة قبل الاعتماد. أرقام المواد بالذهبي من النظام القديم، وبالأزرق من الجديد.</div>
+    <div class="toc">${secs.map((s, i) => '<div><span>' + ar(i + 1) + '</span><a href="#s' + i + '">' + esc(s.title) + '</a></div>').join('')}<div><span>${ar(secs.length + 1)}</span><a href="#map">جدول المطابقة مادة مادة</a></div></div>
+    ${secHtml}
+    <section class="mapsec"><h2 id="map"><span class="no">${ar(secs.length + 1)}</span>جدول المطابقة مادة مادة</h2>
+    ${tr(rows.law, 'مواد النظام')}${rows.reg && rows.reg.length ? tr(rows.reg, 'مواد اللائحة') : ''}</section>
+    </body></html>`;
+
+    const header = '<div style="width:100%;font-size:8px;color:#8b97a5;padding:0 18mm;direction:rtl;font-family:sans-serif;display:flex;justify-content:space-between"><span>مقارنة: ' + esc(nm(cfg.oLaw)) + ' ← ' + esc(nm(cfg.nLaw)) + '</span><span>الأنظمة</span></div>';
+    const footer = '<div style="width:100%;font-size:9px;color:#5d6a78;text-align:center;font-family:sans-serif;direction:rtl">صفحة <span class="pageNumber"></span> من <span class="totalPages"></span></div>';
+    return { html, header, footer };
+  }
+
+  G.CMP = { reportHTML, parts, resume, missing, norm, ar, en, esc, regOptions, defaultReg, compare, diffHTML, doc, report, retry, quickTest, sections, parseSec, progress, aiRows, ask, refsHTML, estimate, key, docx };
 })(typeof window !== 'undefined' ? window : globalThis);
