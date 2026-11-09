@@ -32,6 +32,16 @@ enum Demo {
         }
     }
 
+    /// When the system started this process — to tell the system's own launch time apart from the app's.
+    static var processStart: Date {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return Date() }
+        let t = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: Double(t.tv_sec) + Double(t.tv_usec) / 1_000_000)
+    }
+
     /// Tells the build machine the screen is ready to photograph: written once the cover is gone
     /// and the index is ready, with how long each took. The build waits for this file instead of
     /// a fixed delay, and treats a screen that never writes it as stuck.
@@ -42,8 +52,9 @@ enum Demo {
         let shown = Date().timeIntervalSince(launch)
         while !lib.indexReady { try? await Task.sleep(nanoseconds: 100_000_000) }
         try? await Task.sleep(nanoseconds: 1_500_000_000)
-        let report = String(format: "screen=%@ cover_gone=%.2fs laws=%.2fs index=%.2fs (%@)\n",
-                            screen ?? "", shown, lib.loadSeconds, lib.indexSeconds, lib.indexSource)
+        let report = String(format: "screen=%@ process_to_first_screen=%.1fs cover_gone=%.2fs laws=%.2fs index=%.2fs (%@)\n",
+                            screen ?? "", launch.timeIntervalSince(processStart), shown,
+                            lib.loadSeconds, lib.indexSeconds, lib.indexSource)
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? report.write(to: dir.appendingPathComponent("demo-ready.txt"), atomically: true, encoding: .utf8)

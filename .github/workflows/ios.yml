@@ -81,18 +81,30 @@ jobs:
           xcrun simctl install "$UDID" "$APP"
           mkdir -p "$RUNNER_TEMP/shots"
           : > "$RUNNER_TEMP/problems.txt"
+          # wait_ready <pid> <seconds>: sets STATE to ready, crashed or stuck
+          wait_ready() {
+            STATE=stuck
+            for i in $(seq 1 "$2"); do
+              if [ -f "$DATA/Documents/demo-ready.txt" ]; then STATE=ready; return; fi
+              if ! ps -p "$1" > /dev/null 2>&1; then STATE=crashed; return; fi
+              sleep 1
+            done
+          }
+          # The first launch after installing is slow on the simulator (it registers the app and its
+          # fonts), so warm it up once before timing any screen.
+          DATA=$(xcrun simctl get_app_container "$UDID" com.gts2svg.anthima data)
+          rm -f "$DATA/Documents/demo-ready.txt"
+          PID=$(xcrun simctl launch "$UDID" com.gts2svg.anthima -screen home | awk '{print $NF}')
+          wait_ready "$PID" 240
+          echo "warm-up: $STATE after ${i}s — $(cat "$DATA/Documents/demo-ready.txt" 2>/dev/null)"
           for s in home category law article regarticle search number ask saved settings; do
             xcrun simctl terminate "$UDID" com.gts2svg.anthima 2>/dev/null || true
             DATA=$(xcrun simctl get_app_container "$UDID" com.gts2svg.anthima data)
             rm -f "$DATA/Documents/demo-ready.txt"
             PID=$(xcrun simctl launch "$UDID" com.gts2svg.anthima -screen "$s" | awk '{print $NF}')
-            # wait for the app to say the screen is ready (up to 90 s), or notice it died
-            STATE=stuck
-            for i in $(seq 1 90); do
-              if [ -f "$DATA/Documents/demo-ready.txt" ]; then STATE=ready; break; fi
-              if ! ps -p "$PID" > /dev/null 2>&1; then STATE=crashed; break; fi
-              sleep 1
-            done
+            # wait for the app to say the screen is ready, or notice it died. The limit is generous
+            # because this shared machine sometimes stalls for a minute; a real hang never finishes.
+            wait_ready "$PID" 180
             if [ "$STATE" = ready ]; then
               echo "✓ $(cat "$DATA/Documents/demo-ready.txt") — after ${i}s"
               sleep 1
