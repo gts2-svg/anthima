@@ -15,6 +15,7 @@ struct AskView: View {
     @State private var step = "يكيّف السؤال…"
     @State private var lastFailed: String?
     @State private var focused = false
+    @State private var confirmClear = false
 
     private var hasKey: Bool { KeyStore.key != nil }
 
@@ -253,8 +254,23 @@ struct AskView: View {
 
     private var historyList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("أسئلتك السابقة").font(F.ui(12, .bold)).foregroundStyle(T.muted).padding(.top, 8)
-            ForEach(store.history.prefix(8)) { r in
+            HStack {
+                Text("أسئلتك السابقة").font(F.ui(12, .bold)).foregroundStyle(T.muted)
+                Spacer()
+                Button("مسح الكل") { confirmClear = true }
+                    .font(F.ui(13, .semibold)).foregroundStyle(T.red)
+            }
+            .padding(.top, 8)
+            .confirmationDialog("تمسح كل أسئلتك السابقة؟", isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("امسح الكل", role: .destructive) {
+                    withAnimation { store.history = [] }
+                    current = nil
+                    asked = nil
+                }
+                Button("إلغاء", role: .cancel) {}
+            }
+            Text("اضغط مطوّلاً على أي سؤال لحذفه").font(F.ui(11)).foregroundStyle(T.muted)
+            ForEach(store.history.prefix(20)) { r in
                 Button {
                     current = r
                     asked = r.question
@@ -269,6 +285,13 @@ struct AskView: View {
                     .card(radius: 12)
                 }
                 .buttonStyle(.press)
+                .contextMenu {
+                    Button("نسخ السؤال", systemImage: "doc.on.doc") { Clipboard.copy(r.question) }
+                    Button("احذفه", systemImage: "trash", role: .destructive) {
+                        withAnimation { store.history.removeAll { $0.id == r.id } }
+                        if current?.id == r.id { current = nil; asked = nil }
+                    }
+                }
             }
         }
     }
