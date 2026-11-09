@@ -1,0 +1,119 @@
+name: ios
+
+# Builds the iPhone app «الأنظمة» (ios/), takes screenshots on the simulator,
+# and publishes an unsigned Anthima.ipa on the "ios-sideload" release for SideStore.
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", "laws.json", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "macOS runner"
+        default: macos-15-intel
+
+permissions:
+  contents: write
+
+jobs:
+  app:
+    runs-on: ${{ github.event.inputs.runner || 'macos-15-intel' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | grep -v beta | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+
+      - name: Build the laws file
+        run: python3 ios/tools/build_data.py
+
+      - name: Generate project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for simulator
+        working-directory: ios
+        run: |
+          set +e
+          xcodebuild -project Anthima.xcodeproj -scheme Anthima -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+          STATUS=$?
+          tail -n 20 build.log
+          grep -E "^/.*:[0-9]+:[0-9]+: error:" build.log | sort -u | head -45 > errors.txt
+          echo "---- errors ($(wc -l < errors.txt)) ----"; cat errors.txt
+          echo "---- warnings ----"
+          grep -E "^/.*:[0-9]+:[0-9]+: warning:" build.log | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -40
+          while IFS= read -r line; do
+            f=$(echo "$line" | cut -d: -f1); l=$(echo "$line" | cut -d: -f2); m=$(echo "$line" | cut -d: -f5-)
+            echo "::error file=${f#$GITHUB_WORKSPACE/},line=$l::$m"
+          done < errors.txt
+          exit $STATUS
+
+      - name: Screenshots
+        working-directory: ios
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Pro' in x['name'] and 'Max' not in x['name']]
+          print(c[-1]['udid'])")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          APP=$(find build/Build/Products -name "Anthima.app" -maxdepth 3 | head -1)
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p "$RUNNER_TEMP/shots"
+          for s in home law article regarticle search number ask saved settings; do
+            xcrun simctl terminate "$UDID" com.gts2svg.anthima || true
+            xcrun simctl launch "$UDID" com.gts2svg.anthima -screen "$s"
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$s.png"
+            if ! xcrun simctl spawn "$UDID" launchctl list | grep -q anthima; then echo "::warning::$s — app not running (crash?)"; fi
+          done
+          ls -la "$RUNNER_TEMP/shots"
+
+      - name: Publish screenshots to the ios-screens branch
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens" && cd "$RUNNER_TEMP/screens"
+          git init -q -b ios-screens
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          cp "$RUNNER_TEMP"/shots/*.png .
+          git add *.png
+          git commit -q -m "screenshots for ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ios-screens
+
+      - name: Build for device (unsigned)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Anthima.xcodeproj -scheme Anthima -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            build 2>&1 | tee device.log | grep -E "error:|BUILD" || true
+          test -d build-device/Build/Products/Release-iphoneos/Anthima.app || { tail -n 60 device.log; exit 1; }
+          mkdir -p ipa/Payload
+          cp -R build-device/Build/Products/Release-iphoneos/Anthima.app ipa/Payload/
+          plutil -replace CFBundleDisplayName -string Anthima ipa/Payload/Anthima.app/Info.plist
+          cd ipa && zip -qry ../Anthima.ipa Payload && cd ..
+          ls -la Anthima.ipa
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-sideload --yes --cleanup-tag 2>/dev/null || true
+          gh release create ios-sideload ios/Anthima.ipa \
+            --title "الأنظمة — نسخة SideStore" \
+            --notes "بناء رقم ${{ github.run_number }} (${GITHUB_SHA::7}). ثبّته من SideStore." \
+            --latest=false
