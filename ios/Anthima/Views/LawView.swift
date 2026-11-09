@@ -5,6 +5,7 @@ struct LawView: View {
     let lawID: String
     @ObservedObject private var nav = AppNav.shared
     @ObservedObject private var store = UserStore.shared
+    @ObservedObject private var lib = Library.shared
     @State private var tab = 0
     @State private var query = ""
     @State private var searching = false
@@ -129,7 +130,13 @@ struct LawView: View {
     @ViewBuilder
     private func articles(_ law: Law) -> some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty {
+        if !q.isEmpty && !lib.indexReady {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("يجهّز الفهرس…").font(F.ui(14)).foregroundStyle(T.muted)
+            }
+            .padding(.vertical, 20)
+        } else if !q.isEmpty {
             let idx = Library.shared.index
             let byNumber = idx.numberLookup(q, in: law.id)
             let hits = idx.search(q, in: law.id, limit: 80)

@@ -71,6 +71,9 @@ struct RootView: View {
             Demo.apply()
             #endif
             withAnimation(.easeOut(duration: 0.35)) { splashDone = true }
+            #if DEBUG
+            await Demo.markReady(launch: start)
+            #endif
         }
     }
 

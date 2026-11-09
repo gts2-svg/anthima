@@ -193,3 +193,149 @@ struct SearchIndex {
         return (start > 0 ? "…" : "") + out
     }
 }
+
+// MARK: - The ready-made index file
+//
+// The index is built once on the build machine (ios/tools/IndexTool) with this same code and
+// shipped as «searchindex.dat», so the phone only reads it. The file records every law's id and
+// article count; if they do not match the bundled laws it is ignored and the index is rebuilt.
+
+extension SearchIndex {
+    private static let magic: UInt32 = 0x3158_4941   // "AIX1"
+    private static let version: UInt32 = 1
+
+    func serialized(laws: [Law]) -> Data {
+        var w = IndexWriter()
+        w.u32(Self.magic)
+        w.u32(Self.version)
+        w.u32(UInt32(laws.count))
+        for law in laws {
+            w.str(law.id)
+            w.u32(UInt32(law.articles.count))
+            w.strs((lawTerms[law.id] ?? []).sorted())
+        }
+        let lawRef = Dictionary(uniqueKeysWithValues: laws.enumerated().map { ($1.id, UInt32($0)) })
+        w.u32(UInt32(docs.count))
+        for d in docs {
+            w.u32(lawRef[d.lawID] ?? 0)
+            w.u32(UInt32(d.index))
+            w.str(d.folded)
+            w.strs(d.headTerms.sorted())
+        }
+        w.u32(UInt32(postings.count))
+        for term in postings.keys.sorted() {
+            w.str(term)
+            w.i32s(postings[term] ?? [])
+        }
+        return w.data
+    }
+
+    /// Reads a ready-made index; nil when the file is damaged or was made from other laws.
+    init?(data: Data, laws: [Law]) {
+        var r = IndexReader(data)
+        do {
+            guard try r.u32() == Self.magic, try r.u32() == Self.version,
+                  try r.u32() == UInt32(laws.count) else { return nil }
+            var ids: [String] = []
+            for law in laws {
+                let id = try r.str()
+                guard id == law.id, try r.u32() == UInt32(law.articles.count) else { return nil }
+                lawTerms[id] = try Set(r.strs())
+                lawsByID[id] = law
+                ids.append(id)
+            }
+            let docCount = try Int(r.u32())
+            docs.reserveCapacity(docCount)
+            for _ in 0..<docCount {
+                let ref = try Int(r.u32())
+                let index = try Int(r.u32())
+                guard ids.indices.contains(ref), laws[ref].articles.indices.contains(index) else { return nil }
+                let folded = try r.str()
+                let head = try Set(r.strs())
+                docs.append(Doc(lawID: ids[ref], index: index, folded: folded, headTerms: head))
+            }
+            let termCount = try Int(r.u32())
+            postings.reserveCapacity(termCount)
+            for _ in 0..<termCount {
+                let term = try r.str()
+                let list = try r.i32s()
+                guard list.allSatisfy({ $0 >= 0 && Int($0) < docCount }) else { return nil }
+                postings[term] = list
+            }
+            guard r.atEnd else { return nil }
+        } catch {
+            return nil
+        }
+        vocabulary = Array(postings.keys)
+    }
+}
+
+private struct IndexWriter {
+    var data = Data()
+
+    mutating func u32(_ v: UInt32) {
+        withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) }
+    }
+
+    mutating func str(_ s: String) {
+        let bytes = Array(s.utf8)
+        u32(UInt32(bytes.count))
+        data.append(contentsOf: bytes)
+    }
+
+    mutating func strs(_ list: [String]) {
+        u32(UInt32(list.count))
+        for s in list { str(s) }
+    }
+
+    mutating func i32s(_ list: [Int32]) {
+        u32(UInt32(list.count))
+        for v in list { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
+    }
+}
+
+private struct IndexReader {
+    struct Damaged: Error {}
+    private let bytes: [UInt8]
+    private var at = 0
+
+    init(_ data: Data) { bytes = [UInt8](data) }
+
+    var atEnd: Bool { at == bytes.count }
+
+    private mutating func take(_ n: Int) throws -> ArraySlice<UInt8> {
+        guard n >= 0, at + n <= bytes.count else { throw Damaged() }
+        defer { at += n }
+        return bytes[at..<(at + n)]
+    }
+
+    mutating func u32() throws -> UInt32 {
+        let b = try take(4)
+        let i = b.startIndex
+        return UInt32(b[i]) | UInt32(b[i + 1]) << 8 | UInt32(b[i + 2]) << 16 | UInt32(b[i + 3]) << 24
+    }
+
+    mutating func str() throws -> String {
+        let n = try Int(u32())
+        return try String(decoding: take(n), as: UTF8.self)
+    }
+
+    mutating func strs() throws -> [String] {
+        let n = try Int(u32())
+        var out: [String] = []
+        out.reserveCapacity(n)
+        for _ in 0..<n { try out.append(str()) }
+        return out
+    }
+
+    mutating func i32s() throws -> [Int32] {
+        let n = try Int(u32())
+        guard n >= 0, n <= (bytes.count - at) / 4 else { throw Damaged() }
+        var out = [Int32](repeating: 0, count: n)
+        let b = try take(n * 4)
+        out.withUnsafeMutableBytes { dst in
+            b.withUnsafeBytes { src in dst.copyMemory(from: src) }
+        }
+        return out
+    }
+}

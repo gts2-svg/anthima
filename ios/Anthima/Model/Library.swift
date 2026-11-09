@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 enum LawKind: String, Codable {
     case law, reg, rules
@@ -41,16 +42,22 @@ struct Article: Codable, Identifiable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        n = (try? c.decode(String.self, forKey: .n)) ?? ""
-        label = (try? c.decode(String.self, forKey: .label)) ?? n
-        heading = (try? c.decode(String.self, forKey: .heading)) ?? ""
-        title = try? c.decode(String.self, forKey: .title)
-        part = try? c.decode(String.self, forKey: .part)
-        chapter = try? c.decode(String.self, forKey: .chapter)
-        text = (try? c.decode(String.self, forKey: .text)) ?? ""
-        note = try? c.decode(String.self, forKey: .note)
-        ref = try? c.decode(String.self, forKey: .ref)
-        repealed = try? c.decode(Bool.self, forKey: .repealed)
+        // decodeIfPresent: a missing key costs nothing, unlike `try? decode`, which builds
+        // and throws an error for each of the thousands of absent optional fields.
+        n = Article.str(c, .n) ?? ""
+        label = Article.str(c, .label) ?? n
+        heading = Article.str(c, .heading) ?? ""
+        title = Article.str(c, .title)
+        part = Article.str(c, .part)
+        chapter = Article.str(c, .chapter)
+        text = Article.str(c, .text) ?? ""
+        note = Article.str(c, .note)
+        ref = Article.str(c, .ref)
+        repealed = (try? c.decodeIfPresent(Bool.self, forKey: .repealed)) ?? nil
+    }
+
+    private static func str(_ c: KeyedDecodingContainer<CodingKeys>, _ k: CodingKeys) -> String? {
+        (try? c.decodeIfPresent(String.self, forKey: k)) ?? nil
     }
 
     /// «المادة الثلاثون» / «المادة 1/30» / a table caption.
@@ -105,6 +112,20 @@ struct Law: Codable, Identifiable, Hashable {
 struct LibraryFile: Codable {
     let categories: [Category]
     let laws: [Law]
+
+    /// Decodes the bundled laws file and fills each article's law and position.
+    /// Shared by the app and by the build tool that makes the search index.
+    static func prepared(from data: Data) -> LibraryFile? {
+        guard let file = try? JSONDecoder().decode(LibraryFile.self, from: data) else { return nil }
+        var laws = file.laws
+        for li in laws.indices {
+            for ai in laws[li].articles.indices {
+                laws[li].articles[ai].lawID = laws[li].id
+                laws[li].articles[ai].index = ai
+            }
+        }
+        return LibraryFile(categories: file.categories, laws: laws)
+    }
 }
 
 /// All laws, loaded once from the bundled file.
@@ -119,23 +140,21 @@ final class Library: ObservableObject {
 
     var articleCount: Int { laws.reduce(0) { $0 + $1.numberedCount } }
 
-    /// True once the search index is built (a few seconds after the laws are on screen).
+    /// True once the search index is ready (normally a moment after the laws are on screen).
     @Published private(set) var indexReady = false
+
+    /// For the build machine's report: how long loading took and where the index came from.
+    private(set) var loadSeconds: Double = 0
+    private(set) var indexSeconds: Double = 0
+    private(set) var indexSource = ""
 
     func load() async {
         if isLoaded { return }
+        let t0 = Date()
         let file: LibraryFile? = await Task.detached(priority: .userInitiated) {
             guard let url = Bundle.main.url(forResource: "laws", withExtension: "json"),
-                  let data = try? Data(contentsOf: url),
-                  let file = try? JSONDecoder().decode(LibraryFile.self, from: data) else { return nil }
-            var laws = file.laws
-            for li in laws.indices {
-                for ai in laws[li].articles.indices {
-                    laws[li].articles[ai].lawID = laws[li].id
-                    laws[li].articles[ai].index = ai
-                }
-            }
-            return LibraryFile(categories: file.categories, laws: laws)
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return LibraryFile.prepared(from: data)
         }.value
         await MainActor.run {
             if let file {
@@ -143,12 +162,25 @@ final class Library: ObservableObject {
                 laws = file.laws
                 lawByID = Dictionary(uniqueKeysWithValues: file.laws.map { ($0.id, $0) })
             }
+            loadSeconds = Date().timeIntervalSince(t0)
             isLoaded = true
         }
+        // The index is made once on the build machine and shipped with the app; reading it takes
+        // a fraction of a second. Only if it is missing or does not match the laws is it rebuilt here.
         let all = laws
-        let idx = await Task.detached(priority: .utility) { SearchIndex(laws: all) }.value
+        let t1 = Date()
+        let (idx, source) = await Task.detached(priority: .userInitiated) { () -> (SearchIndex, String) in
+            if let url = Bundle.main.url(forResource: "searchindex", withExtension: "dat"),
+               let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+               let ready = SearchIndex(data: data, laws: all) {
+                return (ready, "bundled")
+            }
+            return (SearchIndex(laws: all), "built-on-device")
+        }.value
         await MainActor.run {
             index = idx
+            indexSeconds = Date().timeIntervalSince(t1)
+            indexSource = source
             indexReady = true
         }
     }

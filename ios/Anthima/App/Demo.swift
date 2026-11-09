@@ -29,5 +29,22 @@ enum Demo {
         default: break
         }
     }
+
+    /// Tells the build machine the screen is ready to photograph: written once the cover is gone
+    /// and the index is ready, with how long each took. The build waits for this file instead of
+    /// a fixed delay, and treats a screen that never writes it as stuck.
+    @MainActor
+    static func markReady(launch: Date) async {
+        guard screen != nil else { return }
+        let lib = Library.shared
+        let shown = Date().timeIntervalSince(launch)
+        while !lib.indexReady { try? await Task.sleep(nanoseconds: 100_000_000) }
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        let report = String(format: "screen=%@ cover_gone=%.2fs laws=%.2fs index=%.2fs (%@)\n",
+                            screen ?? "", shown, lib.loadSeconds, lib.indexSeconds, lib.indexSource)
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? report.write(to: dir.appendingPathComponent("demo-ready.txt"), atomically: true, encoding: .utf8)
+    }
 }
 #endif

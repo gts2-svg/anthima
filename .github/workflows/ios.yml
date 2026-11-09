@@ -31,6 +31,16 @@ jobs:
       - name: Build the laws file
         run: python3 ios/tools/build_data.py
 
+      # The search index is made here, once, with the app's own search code, and shipped inside
+      # the app — so the phone opens instantly instead of indexing every law on each launch.
+      - name: Build the search index
+        run: |
+          xcrun swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos14" \
+            ios/Anthima/Model/ArabicText.swift ios/Anthima/Model/Library.swift \
+            ios/Anthima/Model/SearchIndex.swift ios/tools/IndexTool/main.swift \
+            -o "$RUNNER_TEMP/buildindex"
+          "$RUNNER_TEMP/buildindex" ios/Anthima/Resources/laws.json ios/Anthima/Resources/searchindex.dat
+
       - name: Generate project
         working-directory: ios
         run: |
@@ -70,12 +80,29 @@ jobs:
           APP=$(find build/Build/Products -name "Anthima.app" -maxdepth 3 | head -1)
           xcrun simctl install "$UDID" "$APP"
           mkdir -p "$RUNNER_TEMP/shots"
+          : > "$RUNNER_TEMP/problems.txt"
           for s in home law article regarticle search number ask saved settings; do
-            xcrun simctl terminate "$UDID" com.gts2svg.anthima || true
-            xcrun simctl launch "$UDID" com.gts2svg.anthima -screen "$s"
-            sleep 16
-            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$s.png"
-            if ! xcrun simctl spawn "$UDID" launchctl list | grep -q anthima; then echo "::warning::$s — app not running (crash?)"; fi
+            xcrun simctl terminate "$UDID" com.gts2svg.anthima 2>/dev/null || true
+            DATA=$(xcrun simctl get_app_container "$UDID" com.gts2svg.anthima data)
+            rm -f "$DATA/Documents/demo-ready.txt"
+            PID=$(xcrun simctl launch "$UDID" com.gts2svg.anthima -screen "$s" | awk '{print $NF}')
+            # wait for the app to say the screen is ready (up to 90 s), or notice it died
+            STATE=stuck
+            for i in $(seq 1 90); do
+              if [ -f "$DATA/Documents/demo-ready.txt" ]; then STATE=ready; break; fi
+              if ! ps -p "$PID" > /dev/null 2>&1; then STATE=crashed; break; fi
+              sleep 1
+            done
+            if [ "$STATE" = ready ]; then
+              echo "✓ $(cat "$DATA/Documents/demo-ready.txt") — after ${i}s"
+              sleep 1
+            fi
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$s.png" > /dev/null
+            if [ "$STATE" = ready ] && ! ps -p "$PID" > /dev/null 2>&1; then STATE=crashed; fi
+            if [ "$STATE" != ready ]; then
+              echo "::error::screen «$s»: $STATE"
+              echo "$s: $STATE" >> "$RUNNER_TEMP/problems.txt"
+            fi
           done
           ls -la "$RUNNER_TEMP/shots"
           for f in $(find ~/Library/Logs/DiagnosticReports -name "Anthima*" 2>/dev/null); do
@@ -94,6 +121,15 @@ jobs:
           git add *.png
           git commit -q -m "screenshots for ${GITHUB_SHA::7}"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ios-screens
+
+      # A screen that crashed or never finished opening stops the build here,
+      # so a broken version never reaches the release you install from.
+      - name: Check every screen opened
+        run: |
+          if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+            echo "These screens failed:"; cat "$RUNNER_TEMP/problems.txt"; exit 1
+          fi
+          echo "All screens opened."
 
       - name: Build for device (unsigned)
         working-directory: ios

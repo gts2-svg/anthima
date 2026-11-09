@@ -1,3 +1,4 @@
 Anthima/Resources/laws.json
 *.xcodeproj
 build/
+Anthima/Resources/searchindex.dat
