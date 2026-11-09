@@ -11,7 +11,11 @@ struct SavedView: View {
             VStack(alignment: .leading, spacing: 8) {
                 if items.isEmpty {
                     VStack(spacing: 10) {
-                        Image(systemName: "bookmark").font(.system(size: 36)).foregroundStyle(T.accent)
+                        Image(systemName: "bookmark")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(T.amber)
+                            .frame(width: 72, height: 72)
+                            .background(T.amberSoft, in: Circle())
                         Text("ما حفظت مواد بعد").font(F.ui(16, .bold)).foregroundStyle(T.ink)
                         Text("اضغط علامة الحفظ في أي مادة، وتلقاها هنا.")
                             .font(F.ui(14)).foregroundStyle(T.muted)
@@ -19,19 +23,21 @@ struct SavedView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 80)
                 }
+                Text("المحفوظات").font(F.title(28)).foregroundStyle(T.ink).padding(.top, 4).padding(.bottom, 6)
                 ForEach(items) { a in
                     Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, showLaw: true) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.press)
+                        .softScroll()
                         .contextMenu {
                             Button("إلغاء الحفظ", systemImage: "bookmark.slash", role: .destructive) { store.toggleSave(a) }
                         }
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 30)
         }
         .background(T.bg.ignoresSafeArea())
-        .navigationTitle("المحفوظات")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

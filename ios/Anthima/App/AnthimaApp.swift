@@ -11,6 +11,7 @@ struct AnthimaApp: App {
 }
 
 enum Nav: Hashable {
+    case category(String)
     case law(String)
     case article(String)
     case settings
@@ -77,12 +78,14 @@ struct RootView: View {
         }
     }
 
+    @Namespace private var zoom
+
     private var tabs: some View {
         TabView(selection: $nav.tab) {
             NavigationStack(path: $nav.library) {
                 LibraryView().navigationDestination(for: Nav.self, destination: destination)
             }
-            .tabItem { Label("المكتبة", systemImage: "books.vertical") }
+            .tabItem { Label("الرئيسية", systemImage: "house") }
             .tag(0)
 
             NavigationStack(path: $nav.search) {
@@ -94,7 +97,7 @@ struct RootView: View {
             NavigationStack(path: $nav.ask) {
                 AskView().navigationDestination(for: Nav.self, destination: destination)
             }
-            .tabItem { Label("اسأل", systemImage: "bubble.left.and.text.bubble.right") }
+            .tabItem { Label("اسأل", systemImage: "sparkles") }
             .tag(2)
 
             NavigationStack(path: $nav.saved) {
@@ -103,35 +106,46 @@ struct RootView: View {
             .tabItem { Label("المحفوظات", systemImage: "bookmark") }
             .tag(3)
         }
+        .environment(\.zoomSpace, zoom)
+        .sensoryFeedback(.selection, trigger: nav.tab)
     }
 
     @ViewBuilder
     private func destination(_ n: Nav) -> some View {
         switch n {
-        case .law(let id): LawView(lawID: id)
+        case .category(let id): CategoryView(catID: id).zoomDestination("cat-\(id)", in: zoom)
+        case .law(let id): LawView(lawID: id).zoomDestination("law-\(id)", in: zoom)
         case .article(let key): ArticleView(startKey: key)
         case .settings: SettingsView()
         }
     }
 }
 
-/// The opening cover: title and name, as on the home page.
+/// The opening cover: soft morning colours, the title and the name.
 struct SplashView: View {
+    @State private var shown = false
+
     var body: some View {
         ZStack {
-            T.ink.ignoresSafeArea()
+            LinearGradient(colors: [Color(hex: 0xE0E7FF), T.bg], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
             VStack(spacing: 10) {
-                Image(systemName: "books.vertical")
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(T.gold)
-                    .padding(.bottom, 8)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(T.accent)
+                    .padding(.bottom, 6)
                 Text("مكتبة الأنظمة الخاصة")
-                    .font(F.title(32))
-                    .foregroundStyle(.white)
+                    .font(F.title(30))
+                    .foregroundStyle(T.ink)
                 Text("جبران طالع التليدي")
-                    .font(F.ruqaa(24))
+                    .font(F.ruqaa(22))
                     .foregroundStyle(T.gold)
             }
+            .scaleEffect(shown ? 1 : 0.92)
+            .opacity(shown ? 1 : 0)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) { shown = true }
         }
     }
 }

@@ -16,13 +16,15 @@ enum Demo {
         let store = UserStore.shared
         if let a = lib.article(key: "murafaat|30") { store.lastRead = a.key }
         if store.saved.isEmpty { store.saved = ["ithbat|3", "murafaat|30", "tahkeem|2"] }
+        if store.recentSearches.isEmpty { store.recentSearches = ["مدة الاستئناف", "الدليل الناقص", "التحكيم"] }
         switch screen {
         case "law": nav.library = [.law("ithbat")]
+        case "category": nav.library = [.category("qadaa")]
         case "reg": nav.library = [.law("murafaat_reg")]
         case "article": nav.library = [.article("murafaat|30")]
         case "regarticle": nav.library = [.article("murafaat_reg|30.1")]
-        case "search": nav.tab = 1; nav.searchDraft = "مدة الاستيناف"
-        case "number": nav.tab = 1; nav.searchDraft = "الماده الثلاثون مرافعات"
+        case "search": nav.tab = 1; nav.searchDraft = "مدة الاستئناف"
+        case "number": nav.tab = 1; nav.searchDraft = "المادة الثلاثون مرافعات"
         case "ask": nav.tab = 2
         case "saved": nav.tab = 3
         case "settings": nav.library = [.settings]

@@ -45,13 +45,15 @@ struct AskView: View {
                     if current == nil && !busy { suggestions }
                     if !store.history.isEmpty && !busy { historyList }
                 }
-                .padding(16)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                .animation(.spring(response: 0.45, dampingFraction: 0.85), value: busy)
             }
             inputBar
         }
         .background(T.bg.ignoresSafeArea())
-        .navigationTitle("اسأل")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .keyboardDone()
         .onAppear(perform: takeDraft)
         .onChange(of: nav.askDraft) { _, _ in takeDraft() }
@@ -69,12 +71,14 @@ struct AskView: View {
 
     private var head: some View {
         HStack(spacing: 10) {
-            Image(systemName: "bubble.left.and.text.bubble.right")
+            Image(systemName: "sparkles")
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(T.accent, in: RoundedRectangle(cornerRadius: 14))
+                .frame(width: 48, height: 48)
+                .background(LinearGradient(colors: [Color(hex: 0x6366F1), T.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text("اسأل").font(F.title(22)).foregroundStyle(T.ink)
+                Text("اسأل").font(F.title(26)).foregroundStyle(T.ink)
                 Text("يجاوب من نصوص مكتبتك فقط، ويذكر المادة").font(F.ui(12)).foregroundStyle(T.muted)
             }
             Spacer()
@@ -87,8 +91,8 @@ struct AskView: View {
                     .lineLimit(1)
                     .foregroundStyle(T.accent)
                     .padding(.horizontal, 10)
-                    .frame(maxWidth: 140, minHeight: 34)
-                    .background(T.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+                    .frame(maxWidth: 140, minHeight: 36)
+                    .background(T.accentSoft, in: Capsule())
             }
         }
     }
@@ -105,7 +109,7 @@ struct AskView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .card(T.sand, radius: 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.press)
     }
 
     private func answerCard(_ r: AskRecord) -> some View {
@@ -142,7 +146,7 @@ struct AskView: View {
                 Text(r.found ? "مواد قريبة" : "أقرب المواد لسؤالك").font(F.ui(12, .bold)).foregroundStyle(T.muted).padding(.top, 4)
                 ForEach(related.prefix(4)) { a in
                     Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, showLaw: true) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.press)
                 }
             }
         }
@@ -165,7 +169,7 @@ struct AskView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .card(T.bg, radius: 14)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.press)
     }
 
     private func smallButton(_ t: String, action: @escaping () -> Void) -> some View {
@@ -174,7 +178,7 @@ struct AskView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(T.line))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.press)
     }
 
     private var suggestions: some View {
@@ -183,10 +187,11 @@ struct AskView: View {
             FlowLayout(spacing: 6) {
                 ForEach(["متى تعتد المحكمة بالدليل الناقص؟", "مدة الاعتراض بالاستئناف", "شروط قبول الدعوى", "التعويض عن الضرر"], id: \.self) { s in
                     Button { question = s; send() } label: {
-                        Text(verbatim: s).font(F.ui(13)).foregroundStyle(T.ink)
-                            .padding(.horizontal, 12).frame(minHeight: 36).card(radius: 12)
+                        Text(verbatim: s).font(F.ui(14)).foregroundStyle(T.ink)
+                            .padding(.horizontal, 14).frame(minHeight: 40)
+                            .background(Capsule().fill(Color.white).shadow(color: Color(hex: 0x111827).opacity(0.05), radius: 6, x: 0, y: 2))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.press)
                     .disabled(!hasKey)
                 }
             }
@@ -210,7 +215,7 @@ struct AskView: View {
                     .padding(12)
                     .card(radius: 12)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.press)
             }
         }
     }
@@ -221,15 +226,15 @@ struct AskView: View {
                 .lineLimit(1...4)
                 .font(F.ui(15))
                 .focused($focused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(T.bg, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(T.field, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             Button(action: send) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 50, height: 50)
-                    .background(canSend ? T.accent : T.line, in: RoundedRectangle(cornerRadius: 14))
+                    .background(canSend ? T.accent : T.line, in: Circle())
             }
             .disabled(!canSend)
             .accessibilityLabel("أرسل")

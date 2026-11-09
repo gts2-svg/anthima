@@ -11,11 +11,13 @@ final class UserStore: ObservableObject {
     @Published var lastRead: String? { didSet { d.set(lastRead, forKey: "lastRead") } }
     @Published var textSize: Double { didSet { d.set(textSize, forKey: "textSize") } }
     @Published var history: [AskRecord] { didSet { saveHistory() } }
+    @Published var recentSearches: [String] { didSet { d.set(recentSearches, forKey: "recentSearches") } }
 
     private init() {
         saved = d.stringArray(forKey: "saved") ?? []
         lastRead = d.string(forKey: "lastRead")
         textSize = d.object(forKey: "textSize") as? Double ?? 19
+        recentSearches = d.stringArray(forKey: "recentSearches") ?? []
         if let data = d.data(forKey: "askHistory"), let h = try? JSONDecoder().decode([AskRecord].self, from: data) {
             history = h
         } else {
@@ -27,6 +29,14 @@ final class UserStore: ObservableObject {
 
     func toggleSave(_ a: Article) {
         if let i = saved.firstIndex(of: a.key) { saved.remove(at: i) } else { saved.insert(a.key, at: 0) }
+    }
+
+    func rememberSearch(_ q: String) {
+        let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count >= 2 else { return }
+        recentSearches.removeAll { $0 == t }
+        recentSearches.insert(t, at: 0)
+        if recentSearches.count > 8 { recentSearches = Array(recentSearches.prefix(8)) }
     }
 
     func remember(_ record: AskRecord) {

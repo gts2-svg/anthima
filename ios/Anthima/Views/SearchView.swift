@@ -4,6 +4,7 @@ import SwiftUI
 struct SearchView: View {
     @ObservedObject private var nav = AppNav.shared
     @ObservedObject private var lib = Library.shared
+    @ObservedObject private var store = UserStore.shared
     @State private var query = ""
     @State private var scope: String? = nil
     @State private var hits: [SearchHit] = []
@@ -13,7 +14,8 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("بحث").font(F.title(28)).foregroundStyle(T.ink).padding(.top, 4)
                 field
                 scopePicker
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -31,11 +33,12 @@ struct SearchView: View {
                     results
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 30)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: hits.count)
         }
         .background(T.bg.ignoresSafeArea())
-        .navigationTitle("بحث")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .keyboardDone()
         .onAppear(perform: takeDraft)
         .onChange(of: nav.searchDraft) { _, _ in takeDraft() }
@@ -53,19 +56,20 @@ struct SearchView: View {
 
     private var field: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(T.muted)
-            TextField("", text: $query, prompt: Text("اكتب المعنى أو رقم المادة…").foregroundStyle(T.muted))
+            Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.accent)
+            TextField("", text: $query, prompt: Text("اكتب المعنى أو رقم المادة").foregroundStyle(T.muted))
                 .font(F.ui(16))
                 .focused($focused)
                 .submitLabel(.search)
+                .onSubmit { store.rememberSearch(query) }
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(T.muted) }
                     .accessibilityLabel("مسح")
             }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 52)
-        .card(radius: 14)
+        .padding(.horizontal, 20)
+        .frame(height: 58)
+        .background(Capsule().fill(Color.white).shadow(color: T.accent.opacity(0.12), radius: 14, x: 0, y: 6))
     }
 
     private var scopePicker: some View {
@@ -84,27 +88,45 @@ struct SearchView: View {
             .foregroundStyle(T.accent)
             .padding(.horizontal, 12)
             .frame(minHeight: 36)
-            .background(T.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+            .background(T.accentSoft, in: Capsule())
         }
     }
 
+    /// Before typing: your recent searches (if any) and a short line on what works.
     private var tips: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("أمثلة").font(F.ui(13, .bold)).foregroundStyle(T.muted)
-            ForEach(["المادة 30 مرافعات", "الماده الثلاثون من نظام الاثبات", "مدة الاستيناف", "شروط قبول الدعوي", "التعويض عن الضرر المعنوي"], id: \.self) { ex in
-                Button { query = ex } label: {
-                    HStack {
-                        Text(verbatim: ex).font(F.ui(14)).foregroundStyle(T.ink)
-                        Spacer()
-                        Image(systemName: "arrow.up.left").font(.system(size: 12)).foregroundStyle(T.muted)
-                    }
-                    .padding(14)
-                    .card(radius: 14)
+        VStack(alignment: .leading, spacing: 14) {
+            if !store.recentSearches.isEmpty {
+                HStack {
+                    Text("بحثت عنها مؤخراً").font(F.ui(14, .semibold)).foregroundStyle(T.ink)
+                    Spacer()
+                    Button("مسح") { withAnimation { store.recentSearches = [] } }
+                        .font(F.ui(13)).foregroundStyle(T.muted)
                 }
-                .buttonStyle(.plain)
+                FlowLayout(spacing: 8) {
+                    ForEach(store.recentSearches, id: \.self) { q in
+                        Button { query = q } label: {
+                            Label(q, systemImage: "clock.arrow.circlepath")
+                                .font(F.ui(14))
+                                .foregroundStyle(T.ink)
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 40)
+                                .background(Capsule().fill(Color.white).shadow(color: Color(hex: 0x111827).opacity(0.05), radius: 6, x: 0, y: 2))
+                        }
+                        .buttonStyle(.press)
+                    }
+                }
             }
-            Text("ما يهم الهمزات ولا التاء المربوطة ولا الأخطاء البسيطة.")
-                .font(F.ui(12)).foregroundStyle(T.muted)
+            VStack(spacing: 10) {
+                Image(systemName: "text.magnifyingglass")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(T.accent)
+                    .frame(width: 72, height: 72)
+                    .background(T.accentSoft, in: Circle())
+                Text("اكتب بالمعنى أو برقم المادة").font(F.ui(16, .semibold)).foregroundStyle(T.ink)
+                Text("ولو فيها خطأ إملائي، يفهمها.").font(F.ui(14)).foregroundStyle(T.muted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, store.recentSearches.isEmpty ? 50 : 24)
         }
     }
 
@@ -122,8 +144,12 @@ struct SearchView: View {
     }
 
     private func link(_ a: Article, preview: String?) -> some View {
-        Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, preview: preview, showLaw: true) }
-            .buttonStyle(.plain)
+        Button {
+            store.rememberSearch(query)
+            nav.open(.article(a.key))
+        } label: { ArticleRow(article: a, preview: preview, showLaw: true) }
+            .buttonStyle(.press)
+            .softScroll()
     }
 
     private func schedule() {

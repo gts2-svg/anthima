@@ -36,10 +36,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         UIAppFonts:
-          - ReemKufi-Bold.ttf
-          - ReadexPro-Regular.ttf
-          - ReadexPro-SemiBold.ttf
-          - ReadexPro-Bold.ttf
-          - NotoNaskhArabic-Regular.ttf
-          - NotoNaskhArabic-SemiBold.ttf
+          - Alexandria-Bold.ttf
+          - Alexandria-ExtraBold.ttf
+          - IBMPlexSansArabic-Regular.ttf
+          - IBMPlexSansArabic-Medium.ttf
+          - IBMPlexSansArabic-SemiBold.ttf
+          - IBMPlexSansArabic-Bold.ttf
           - ArefRuqaa-Bold.ttf

@@ -15,35 +15,54 @@ struct LawView: View {
 
     var body: some View {
         if let law {
+            let sec = T.section(law.cat)
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 14) {
                         head(law)
-                        if searching { searchField }
-                        tabs
+                        if searching { searchField.transition(.move(edge: .top).combined(with: .opacity)) }
+                        partChips(law)
                         switch tab {
-                        case 1: partsList(law, proxy: proxy)
                         case 2: savedList(law)
                         default: articles(law)
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 110)
                 }
                 .onChange(of: jumpTo) { _, id in
                     guard let id else { return }
-                    withAnimation { proxy.scrollTo(id, anchor: .top) }
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { proxy.scrollTo(id, anchor: .top) }
                     jumpTo = nil
                 }
             }
-            .background(T.bg.ignoresSafeArea())
-            .navigationTitle(law.name)
+            .background(
+                LinearGradient(colors: [sec.soft, T.bg], startPoint: .top, endPoint: .init(x: 0.5, y: 0.3)).ignoresSafeArea()
+            )
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { withAnimation { searching.toggle() } } label: { Image(systemName: "magnifyingglass") }
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { searching.toggle() }
+                    } label: { Image(systemName: searching ? "xmark" : "magnifyingglass") }
                         .accessibilityLabel("بحث في هذا النظام")
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button { nav.askScope = law.id; nav.askDraft = ""; nav.tab = 2 } label: {
+                    Label { Text(verbatim: "اسأل عن \(law.name)").lineLimit(1) } icon: { Image(systemName: "sparkles") }
+                        .font(F.ui(15, .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 22)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background {
+                            Capsule().fill(T.accent).shadow(color: T.accent.opacity(0.35), radius: 14, x: 0, y: 8)
+                        }
+                }
+                .buttonStyle(.press)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
             }
             .keyboardDone()
         } else {
@@ -52,47 +71,58 @@ struct LawView: View {
     }
 
     private func head(_ law: Law) -> some View {
-        let c = T.catColors(law.cat)
+        let sec = T.section(law.cat)
         let lib = Library.shared
         let kids = lib.children(of: law)
         let parent = law.parent.flatMap { lib.law($0) }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: law.name).font(F.title(23)).foregroundStyle(T.ink)
-            Text(verbatim: "\(law.kind.label) · \(law.countText)" + (law.parts.isEmpty ? "" : " · \(law.parts.count) \(law.parts.count <= 10 ? "أبواب وفصول" : "باباً وفصلاً")"))
-                .font(F.ui(12)).foregroundStyle(T.muted)
+        let partsText = law.parts.isEmpty ? "" : " · \(law.parts.count) \(law.parts.count <= 10 ? "أبواب وفصول" : "باباً وفصلاً")"
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: lib.categoryName(law.cat)).font(F.ui(13, .semibold)).foregroundStyle(sec.ink)
+            Text(verbatim: law.name).font(F.title(28)).foregroundStyle(T.ink).fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: "\(law.kind.label) · \(law.countText)" + partsText)
+                .font(F.ui(13)).foregroundStyle(T.muted)
             if let d = law.decree, !d.isEmpty {
-                Text(verbatim: d).font(F.ui(12)).foregroundStyle(c.ink)
+                Text(verbatim: d).font(F.ui(12)).foregroundStyle(T.muted)
             }
             if let parent {
                 Button { nav.open(.law(parent.id)) } label: {
                     Label { Text(verbatim: "صادرة لـ \(parent.name)") } icon: { Image(systemName: "arrow.uturn.up") }
                         .font(F.ui(13, .semibold))
+                        .foregroundStyle(T.accent)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 38)
+                        .background(Color.white, in: Capsule())
                 }
+                .buttonStyle(.press)
+                .padding(.top, 4)
             }
             if !kids.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         ForEach(kids) { k in
                             Button { nav.open(.law(k.id)) } label: {
-                                Text(verbatim: k.name.replacingOccurrences(of: " " + law.name, with: ""))
-                                    .font(F.ui(12, .semibold))
-                                    .foregroundStyle(T.sandInk)
-                                    .padding(.horizontal, 12)
-                                    .frame(minHeight: 34)
-                                    .background(T.sand, in: RoundedRectangle(cornerRadius: 10))
-                                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(T.sandLine))
+                                Label { Text(verbatim: k.name.replacingOccurrences(of: " " + law.name, with: "")) } icon: {
+                                    Image(systemName: "list.bullet.rectangle")
+                                }
+                                .font(F.ui(13, .semibold))
+                                .foregroundStyle(T.amberInk)
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 38)
+                                .background(T.amberSoft, in: Capsule())
                             }
+                            .buttonStyle(.press)
                         }
                     }
                 }
+                .padding(.top, 4)
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 4)
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(T.muted)
+            Image(systemName: "magnifyingglass").foregroundStyle(T.accent)
             TextField("", text: $query, prompt: Text("ابحث في هذا النظام أو اكتب رقم المادة").foregroundStyle(T.muted))
                 .font(F.ui(15))
             if !query.isEmpty {
@@ -100,31 +130,45 @@ struct LawView: View {
                     .accessibilityLabel("مسح")
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 46)
-        .card(radius: 14)
+        .padding(.horizontal, 18)
+        .frame(height: 52)
+        .background(Capsule().fill(Color.white).shadow(color: T.accent.opacity(0.10), radius: 10, x: 0, y: 4))
     }
 
-    private var tabs: some View {
-        HStack(spacing: 22) {
-            tabButton("المواد", 0)
-            tabButton("الأبواب", 1)
-            tabButton("محفوظ منه", 2)
-            Spacer()
-        }
-        .padding(.top, 4)
-    }
-
-    private func tabButton(_ title: String, _ i: Int) -> some View {
-        Button { tab = i } label: {
-            VStack(spacing: 6) {
-                Text(title).font(F.ui(14, tab == i ? .bold : .regular)).foregroundStyle(tab == i ? T.accent : T.muted)
-                Rectangle().fill(tab == i ? T.accent : Color.clear).frame(height: 3)
+    /// «الكل», then each part, then «المحفوظ» — tap a part to slide to it.
+    private func partChips(_ law: Law) -> some View {
+        let savedCount = law.articles.filter { store.saved.contains($0.key) }.count
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button { withAnimation { tab = 0 } } label: { Chip(text: "الكل", on: tab == 0 && query.isEmpty) }
+                if savedCount > 0 {
+                    Button { withAnimation { tab = 2 } } label: { Chip(text: "★ المحفوظ \(savedCount)", on: tab == 2) }
+                }
+                ForEach(law.parts, id: \.self) { p in
+                    Button {
+                        tab = 0
+                        query = ""
+                        let target = LawView.firstRowID(of: p, in: law)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { jumpTo = target }
+                    } label: { Chip(text: LawView.shortPart(p)) }
+                }
             }
-            .fixedSize()
-            .frame(minHeight: 40)
+            .buttonStyle(.press)
+            .padding(.vertical, 2)
         }
-        .buttonStyle(.plain)
+    }
+
+    /// «الباب الأول: أحكام عامة» → «أحكام عامة».
+    static func shortPart(_ p: String) -> String {
+        if let r = p.range(of: ":") {
+            let rest = p[r.upperBound...].trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty { return String(rest.prefix(28)) }
+        }
+        let words = p.split(separator: " ")
+        if words.count > 2, ["الباب", "الفصل", "الفرع", "القسم"].contains(String(words[0])) {
+            return words.dropFirst(2).joined(separator: " ").prefix(28).description
+        }
+        return String(p.prefix(28))
     }
 
     @ViewBuilder
@@ -154,8 +198,8 @@ struct LawView: View {
                 ForEach(LawView.rows(law)) { r in
                     switch r.kind {
                     case .part(let p):
-                        Text(verbatim: p).font(F.ui(13, .bold)).foregroundStyle(T.ink)
-                            .padding(.top, 10).padding(.horizontal, 4)
+                        Text(verbatim: p).font(F.title(16, heavy: false)).foregroundStyle(T.ink)
+                            .padding(.top, 12).padding(.horizontal, 4)
                     case .chapter(let c):
                         Text(verbatim: c).font(F.ui(12, .semibold)).foregroundStyle(T.muted)
                             .padding(.horizontal, 4)
@@ -203,7 +247,8 @@ struct LawView: View {
 
     private func row(_ a: Article, preview: String? = nil) -> some View {
         Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, preview: preview) }
-            .buttonStyle(.plain)
+            .buttonStyle(.press)
+            .softScroll()
     }
 
     private func partsList(_ law: Law, proxy: ScrollViewProxy) -> some View {
