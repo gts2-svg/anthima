@@ -63,7 +63,8 @@ struct RootView: View {
         }
         .task {
             let start = Date()
-            await lib.load()
+            Task { await lib.load() }
+            while !lib.isLoaded { try? await Task.sleep(nanoseconds: 50_000_000) }
             let left = 1.1 - Date().timeIntervalSince(start)
             if left > 0 { try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000)) }
             #if DEBUG

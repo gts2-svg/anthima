@@ -119,12 +119,15 @@ final class Library: ObservableObject {
 
     var articleCount: Int { laws.reduce(0) { $0 + $1.numberedCount } }
 
+    /// True once the search index is built (a few seconds after the laws are on screen).
+    @Published private(set) var indexReady = false
+
     func load() async {
         if isLoaded { return }
-        let result: (LibraryFile, SearchIndex)? = await Task.detached(priority: .userInitiated) {
+        let file: LibraryFile? = await Task.detached(priority: .userInitiated) {
             guard let url = Bundle.main.url(forResource: "laws", withExtension: "json"),
                   let data = try? Data(contentsOf: url),
-                  var file = try? JSONDecoder().decode(LibraryFile.self, from: data) else { return nil }
+                  let file = try? JSONDecoder().decode(LibraryFile.self, from: data) else { return nil }
             var laws = file.laws
             for li in laws.indices {
                 for ai in laws[li].articles.indices {
@@ -132,19 +135,21 @@ final class Library: ObservableObject {
                     laws[li].articles[ai].index = ai
                 }
             }
-            file = LibraryFile(categories: file.categories, laws: laws)
-            let idx = SearchIndex(laws: laws)
-            return (file, idx)
+            return LibraryFile(categories: file.categories, laws: laws)
         }.value
         await MainActor.run {
-            if let r = result {
-                let (file, idx) = r
+            if let file {
                 categories = file.categories
                 laws = file.laws
                 lawByID = Dictionary(uniqueKeysWithValues: file.laws.map { ($0.id, $0) })
-                index = idx
             }
             isLoaded = true
+        }
+        let all = laws
+        let idx = await Task.detached(priority: .utility) { SearchIndex(laws: all) }.value
+        await MainActor.run {
+            index = idx
+            indexReady = true
         }
     }
 

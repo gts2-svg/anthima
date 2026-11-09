@@ -3,6 +3,7 @@ import SwiftUI
 /// «بحث» across every law: by meaning (tolerant of spelling slips) or by article number.
 struct SearchView: View {
     @ObservedObject private var nav = AppNav.shared
+    @ObservedObject private var lib = Library.shared
     @State private var query = ""
     @State private var scope: String? = nil
     @State private var hits: [SearchHit] = []
@@ -17,6 +18,12 @@ struct SearchView: View {
                 scopePicker
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     tips
+                } else if !lib.indexReady {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("يجهّز الفهرس…").font(F.ui(14)).foregroundStyle(T.muted)
+                    }
+                    .padding(.vertical, 20)
                 } else if hits.isEmpty && numbered.isEmpty {
                     Text("ما فيه نتائج. جرّب كلمة ثانية، أو اسأل من تبويب «اسأل» بكلامك.")
                         .font(F.ui(14)).foregroundStyle(T.muted).padding(.vertical, 20)
@@ -34,6 +41,7 @@ struct SearchView: View {
         .onChange(of: nav.searchDraft) { _, _ in takeDraft() }
         .onChange(of: query) { _, _ in schedule() }
         .onChange(of: scope) { _, _ in schedule() }
+        .onChange(of: lib.indexReady) { _, _ in schedule() }
     }
 
     private func takeDraft() {

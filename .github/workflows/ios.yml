@@ -43,7 +43,7 @@ jobs:
           set +e
           xcodebuild -project Anthima.xcodeproj -scheme Anthima -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO SWIFT_OPTIMIZATION_LEVEL=-O build > build.log 2>&1
           STATUS=$?
           tail -n 20 build.log
           grep -E "^/.*:[0-9]+:[0-9]+: error:" build.log | sort -u | head -45 > errors.txt
@@ -73,7 +73,7 @@ jobs:
           for s in home law article regarticle search number ask saved settings; do
             xcrun simctl terminate "$UDID" com.gts2svg.anthima || true
             xcrun simctl launch "$UDID" com.gts2svg.anthima -screen "$s"
-            sleep 12
+            sleep 16
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$s.png"
             if ! xcrun simctl spawn "$UDID" launchctl list | grep -q anthima; then echo "::warning::$s — app not running (crash?)"; fi
           done

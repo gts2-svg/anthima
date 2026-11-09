@@ -88,7 +88,9 @@ enum AskService {
 
     static func ask(_ question: String, scope: String?) async throws -> AskRecord {
         let lib = Library.shared
-        let extra = await searchWords(for: question)
+        async let extraWords = searchWords(for: question)
+        while !lib.indexReady { try? await Task.sleep(nanoseconds: 100_000_000) }
+        let extra = await extraWords
         var pool: [Article] = []
         var seen = Set<String>()
         func add(_ list: [Article]) {
