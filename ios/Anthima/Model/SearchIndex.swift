@@ -31,11 +31,11 @@ struct SearchIndex {
             lawTerms[law.id] = Set(ArabicText.terms(law.name))
             for a in law.articles {
                 let id = Int32(docs.count)
-                let body = [a.title ?? "", a.text].joined(separator: " ")
+                let body = (a.title ?? "") + " " + a.text
                 let folded = ArabicText.fold(body)
                 let head = Set(ArabicText.terms((a.title ?? "") + " " + (a.part ?? "") + " " + (a.chapter ?? "")))
                 docs.append(Doc(lawID: law.id, index: a.index, folded: " " + folded + " ", headTerms: head))
-                for t in ArabicText.terms(body) {
+                for t in ArabicText.termsOfFolded(folded) {
                     postings[t, default: []].append(id)
                 }
             }

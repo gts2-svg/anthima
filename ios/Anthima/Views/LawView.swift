@@ -144,22 +144,54 @@ struct LawView: View {
             }
         } else {
             LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(law.articles.enumerated()), id: \.element.id) { i, a in
-                    let prevPart = i > 0 ? (law.articles[i - 1].part ?? "") : nil
-                    let prevChapter = i > 0 ? (law.articles[i - 1].chapter ?? "") : nil
-                    if let p = a.part, !p.isEmpty, p != prevPart {
+                ForEach(LawView.rows(law)) { r in
+                    switch r.kind {
+                    case .part(let p):
                         Text(verbatim: p).font(F.ui(13, .bold)).foregroundStyle(T.ink)
                             .padding(.top, 10).padding(.horizontal, 4)
-                            .id("part-\(p)")
-                    }
-                    if let ch = a.chapter, !ch.isEmpty, ch != prevChapter {
-                        Text(verbatim: ch).font(F.ui(12, .semibold)).foregroundStyle(T.muted)
+                    case .chapter(let c):
+                        Text(verbatim: c).font(F.ui(12, .semibold)).foregroundStyle(T.muted)
                             .padding(.horizontal, 4)
+                    case .article(let a):
+                        row(a)
                     }
-                    row(a)
                 }
             }
         }
+    }
+
+    struct ListRow: Identifiable {
+        enum Kind { case part(String), chapter(String), article(Article) }
+        let id: String
+        let kind: Kind
+    }
+
+    /// Articles with their part and chapter titles in between, each with a unique id.
+    static func rows(_ law: Law) -> [ListRow] {
+        var out: [ListRow] = []
+        var lastPart = "", lastChapter = ""
+        for (i, a) in law.articles.enumerated() {
+            let p = a.part ?? "", c = a.chapter ?? ""
+            if !p.isEmpty && p != lastPart {
+                out.append(ListRow(id: "part-\(i)", kind: .part(p)))
+                lastChapter = ""
+            }
+            if !c.isEmpty && c != lastChapter {
+                out.append(ListRow(id: "chapter-\(i)", kind: .chapter(c)))
+            }
+            lastPart = p
+            lastChapter = c
+            out.append(ListRow(id: a.id, kind: .article(a)))
+        }
+        return out
+    }
+
+    /// The row id of the first title of a part, for «الأبواب».
+    static func firstRowID(of part: String, in law: Law) -> String? {
+        rows(law).first { r in
+            if case .part(let p) = r.kind { return p == part }
+            return false
+        }?.id
     }
 
     private func row(_ a: Article, preview: String? = nil) -> some View {
@@ -177,7 +209,8 @@ struct LawView: View {
                 Button {
                     tab = 0
                     query = ""
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { jumpTo = "part-\(p)" }
+                    let target = LawView.firstRowID(of: p, in: law)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { jumpTo = target }
                 } label: {
                     HStack {
                         Text(verbatim: p).font(F.ui(14, .semibold)).foregroundStyle(T.ink).multilineTextAlignment(.leading)

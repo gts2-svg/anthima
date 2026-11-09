@@ -78,6 +78,9 @@ jobs:
             if ! xcrun simctl spawn "$UDID" launchctl list | grep -q anthima; then echo "::warning::$s — app not running (crash?)"; fi
           done
           ls -la "$RUNNER_TEMP/shots"
+          for f in $(find ~/Library/Logs/DiagnosticReports -name "Anthima*" 2>/dev/null); do
+            echo "==== $f"; head -c 6000 "$f" | grep -E "Exception|Termination|Crashed|Anthima|Fatal|reason|\"symbol\"" | head -60
+          done
 
       - name: Publish screenshots to the ios-screens branch
         env:

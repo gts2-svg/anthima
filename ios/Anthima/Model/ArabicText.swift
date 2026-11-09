@@ -2,42 +2,44 @@ import Foundation
 
 /// Arabic text helpers: folding for search, light stemming, ordinals and counts.
 enum ArabicText {
-    private static let diacritics: Set<Character> = [
-        "\u{064B}", "\u{064C}", "\u{064D}", "\u{064E}", "\u{064F}", "\u{0650}", "\u{0651}", "\u{0652}",
-        "\u{0653}", "\u{0654}", "\u{0655}", "\u{0670}", "\u{0640}"
-    ]
-
     /// Folds spelling variants so «إجراءات» = «اجراءات» and «المحكمة» = «المحكمه».
+    /// Works on Unicode scalars, which is many times faster than Characters for 5000 articles.
     static func fold(_ s: String) -> String {
-        var out = ""
-        out.reserveCapacity(s.count)
-        for ch in s {
-            if diacritics.contains(ch) { continue }
-            switch ch {
-            case "أ", "إ", "آ", "ٱ": out.append("ا")
-            case "ة": out.append("ه")
-            case "ى": out.append("ي")
-            case "ؤ": out.append("و")
-            case "ئ": out.append("ي")
-            case "٠": out.append("0")
-            case "١": out.append("1")
-            case "٢": out.append("2")
-            case "٣": out.append("3")
-            case "٤": out.append("4")
-            case "٥": out.append("5")
-            case "٦": out.append("6")
-            case "٧": out.append("7")
-            case "٨": out.append("8")
-            case "٩": out.append("9")
+        var out = String.UnicodeScalarView()
+        out.reserveCapacity(s.unicodeScalars.count)
+        let space = Unicode.Scalar(UInt32(32))!
+        for u in s.unicodeScalars {
+            let v = u.value
+            switch v {
+            case 0x064B...0x0655, 0x0670, 0x0640:      // tashkeel and tatweel
+                continue
+            case 0x0623, 0x0625, 0x0622, 0x0671:       // أ إ آ ٱ → ا
+                out.append(Unicode.Scalar(UInt32(0x0627))!)
+            case 0x0629:                               // ة → ه
+                out.append(Unicode.Scalar(UInt32(0x0647))!)
+            case 0x0649:                               // ى → ي
+                out.append(Unicode.Scalar(UInt32(0x064A))!)
+            case 0x0624:                               // ؤ → و
+                out.append(Unicode.Scalar(UInt32(0x0648))!)
+            case 0x0626:                               // ئ → ي
+                out.append(Unicode.Scalar(UInt32(0x064A))!)
+            case 0x0660...0x0669:                      // Arabic-Indic digits
+                out.append(Unicode.Scalar(v - 0x0660 + 48)!)
+            case 0x06F0...0x06F9:
+                out.append(Unicode.Scalar(v - 0x06F0 + 48)!)
+            case 0x0621...0x063A, 0x0641...0x064A, 0x0671...0x06D3:
+                out.append(u)
+            case 48...57, 65...90, 97...122:
+                out.append(u)
             default:
-                if ch.isLetter || ch.isNumber { out.append(ch) } else { out.append(" ") }
+                out.append(space)
             }
         }
-        return out
+        return String(out)
     }
 
     static func tokens(_ s: String) -> [String] {
-        fold(s).split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        fold(s).split(separator: " ", omittingEmptySubsequences: true).map(String.init)
     }
 
     static let stopwords: Set<String> = [
@@ -54,19 +56,33 @@ enum ArabicText {
     /// A light stem: «والمحاكم» → «محاكم», «الاختصاصات» → «اختصاص».
     static func stem(_ word: String) -> String {
         var w = word
-        for p in prefixes where w.hasPrefix(p) && w.count - p.count >= 3 {
-            w = String(w.dropFirst(p.count))
+        let n = w.unicodeScalars.count
+        for p in prefixes where n - p.unicodeScalars.count >= 3 && w.hasPrefix(p) {
+            w = String(w.unicodeScalars.dropFirst(p.unicodeScalars.count))
             break
         }
-        for s in suffixes where w.hasSuffix(s) && w.count - s.count >= 3 {
-            w = String(w.dropLast(s.count))
+        let m = w.unicodeScalars.count
+        for s in suffixes where m - s.unicodeScalars.count >= 3 && w.hasSuffix(s) {
+            w = String(w.unicodeScalars.dropLast(s.unicodeScalars.count))
             break
         }
         return w
     }
 
     static func terms(_ s: String) -> [String] {
-        tokens(s).filter { !stopwords.contains($0) }.map(stem).filter { $0.count >= 2 }
+        termsOfFolded(fold(s))
+    }
+
+    /// Same as `terms` for text that is already folded.
+    static func termsOfFolded(_ folded: String) -> [String] {
+        var out: [String] = []
+        for sub in folded.split(separator: " ", omittingEmptySubsequences: true) {
+            let w = String(sub)
+            if stopwords.contains(w) { continue }
+            let st = stem(w)
+            if st.unicodeScalars.count >= 2 { out.append(st) }
+        }
+        return out
     }
 
     // MARK: ordinals («الثلاثون» → 30)
