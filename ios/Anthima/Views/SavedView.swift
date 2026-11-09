@@ -48,6 +48,7 @@ struct SettingsView: View {
     @State private var hasKey = KeyStore.key != nil
     @State private var status: String?
     @State private var testing = false
+    @State private var model = AskModel.current
 
     var body: some View {
         Form {
@@ -90,6 +91,18 @@ struct SettingsView: View {
                     if let status { Text(verbatim: status).foregroundStyle(T.accent) }
                     Text("من console.anthropic.com ← API Keys. يُحفظ في سلسلة مفاتيح الآيفون فقط، ويُحسب عليك بالسؤال. لا ترسله لأحد.")
                 }
+            }
+
+            Section {
+                Picker("نموذج الجواب", selection: $model) {
+                    ForEach(AskModel.allCases) { m in Text(verbatim: m.name).tag(m) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: model) { _, m in AskModel.current = m }
+            } header: {
+                Text("نموذج «اسأل»")
+            } footer: {
+                Text(verbatim: model.note)
             }
 
             Section("حجم نص المادة") {
