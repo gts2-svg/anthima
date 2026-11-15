@@ -3,9 +3,7 @@ name: ios
 # Builds the iPhone app «الأنظمة» (ios/), takes screenshots on the simulator,
 # and publishes an unsigned Anthima.ipa on the "ios-sideload" release for SideStore.
 on:
-  push:
-    branches: [main]
-    paths: ["ios/**", "laws.json", ".github/workflows/ios.yml"]
+  # Manual only (private repo: macOS minutes are limited).
   workflow_dispatch:
     inputs:
       runner:
