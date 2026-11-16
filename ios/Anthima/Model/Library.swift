@@ -28,7 +28,14 @@ struct Article: Codable, Identifiable, Hashable {
     let text: String
     let note: String?
     let ref: String?
-    let repealed: Bool?
+    /// Set from the data, and also for every article of a repealed law that isn't kept in force.
+    var repealed: Bool?
+    let amended: Bool?
+    let added: Bool?
+    /// Kept in force although its law was repealed (by a later decision).
+    let inForce: Bool?
+    /// The text is known to be out of date or doubtful; a warning is shown with it.
+    let unverified: Bool?
     /// Filled after loading.
     var lawID: String = ""
     var index: Int = 0
@@ -37,7 +44,7 @@ struct Article: Codable, Identifiable, Hashable {
     var key: String { "\(lawID)|\(n.isEmpty ? "#\(index)" : n)" }
 
     enum CodingKeys: String, CodingKey {
-        case n, label, heading, title, part, chapter, text, note, ref, repealed
+        case n, label, heading, title, part, chapter, text, note, ref, repealed, amended, added, inForce, unverified
     }
 
     init(from decoder: Decoder) throws {
@@ -53,8 +60,32 @@ struct Article: Codable, Identifiable, Hashable {
         text = Article.str(c, .text) ?? ""
         note = Article.str(c, .note)
         ref = Article.str(c, .ref)
-        repealed = (try? c.decodeIfPresent(Bool.self, forKey: .repealed)) ?? nil
+        repealed = Article.bool(c, .repealed)
+        amended = Article.bool(c, .amended)
+        added = Article.bool(c, .added)
+        inForce = Article.bool(c, .inForce)
+        unverified = Article.bool(c, .unverified)
     }
+
+    private static func bool(_ c: KeyedDecodingContainer<CodingKeys>, _ k: CodingKeys) -> Bool? {
+        (try? c.decodeIfPresent(Bool.self, forKey: k)) ?? nil
+    }
+
+    var isRepealed: Bool { repealed == true }
+
+    /// «ملغاة» / «معدّلة» / «سارية استثناءً» / «للتحقق» — shown as small labels.
+    var statusLabels: [String] {
+        var out: [String] = []
+        if repealed == true { out.append("ملغاة") }
+        if inForce == true { out.append("سارية استثناءً") }
+        if amended == true { out.append("معدّلة") }
+        if added == true { out.append("مضافة") }
+        if unverified == true { out.append("تحقّق من النص") }
+        return out
+    }
+
+    /// The «n» used in links and number search; a kept-aside old version ends with «~old».
+    var isOldVersion: Bool { n.hasSuffix("~old") }
 
     private static func str(_ c: KeyedDecodingContainer<CodingKeys>, _ k: CodingKeys) -> String? {
         (try? c.decodeIfPresent(String.self, forKey: k)) ?? nil
@@ -82,7 +113,12 @@ struct Law: Codable, Identifiable, Hashable {
     let decree: String?
     let source: String?
     let parent: String?
+    /// «repealed» (whole law, except articles kept in force) or «pending» (not in force yet).
+    let status: String?
     var articles: [Article]
+
+    var isRepealed: Bool { status == "repealed" }
+    var isPending: Bool { status == "pending" }
 
     static func == (a: Law, b: Law) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -112,6 +148,8 @@ struct Law: Codable, Identifiable, Hashable {
 struct LibraryFile: Codable {
     let categories: [Category]
     let laws: [Law]
+    /// The date stamp of the law texts (shown in Settings).
+    var dataVersion: String? = nil
 
     /// Decodes the bundled laws file and fills each article's law and position.
     /// Shared by the app and by the build tool that makes the search index.
@@ -122,9 +160,12 @@ struct LibraryFile: Codable {
             for ai in laws[li].articles.indices {
                 laws[li].articles[ai].lawID = laws[li].id
                 laws[li].articles[ai].index = ai
+                if laws[li].isRepealed && laws[li].articles[ai].inForce != true {
+                    laws[li].articles[ai].repealed = true
+                }
             }
         }
-        return LibraryFile(categories: file.categories, laws: laws)
+        return LibraryFile(categories: file.categories, laws: laws, dataVersion: file.dataVersion)
     }
 }
 
@@ -136,6 +177,7 @@ final class Library: ObservableObject {
     private(set) var categories: [Category] = []
     private(set) var laws: [Law] = []
     private(set) var lawByID: [String: Law] = [:]
+    private(set) var dataVersion = ""
     private(set) var index = SearchIndex()
 
     var articleCount: Int { laws.reduce(0) { $0 + $1.numberedCount } }
@@ -161,6 +203,7 @@ final class Library: ObservableObject {
                 categories = file.categories
                 laws = file.laws
                 lawByID = Dictionary(uniqueKeysWithValues: file.laws.map { ($0.id, $0) })
+                dataVersion = file.dataVersion ?? ""
             }
             loadSeconds = Date().timeIntervalSince(t0)
             isLoaded = true
@@ -177,8 +220,13 @@ final class Library: ObservableObject {
             }
             return (SearchIndex(laws: all), "built-on-device")
         }.value
+        var ready = idx
+        if let url = Bundle.main.url(forResource: "synonyms", withExtension: "json"),
+           let data = try? Data(contentsOf: url) {
+            ready.concepts = SearchIndex.concepts(from: data)
+        }
         await MainActor.run {
-            index = idx
+            index = ready
             indexSeconds = Date().timeIntervalSince(t1)
             indexSource = source
             indexReady = true
@@ -193,7 +241,8 @@ final class Library: ObservableObject {
         if parts[1].hasPrefix("#"), let i = Int(parts[1].dropFirst()), law.articles.indices.contains(i) {
             return law.articles[i]
         }
-        return law.articles.first { $0.n == parts[1] }
+        // Prefer the version in force when an old one shares the number.
+        return law.articles.first { $0.n == parts[1] && !$0.isRepealed } ?? law.articles.first { $0.n == parts[1] }
     }
 
     func categoryName(_ id: String) -> String {

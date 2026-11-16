@@ -22,12 +22,45 @@ struct SearchIndex {
     private var vocabulary: [String] = []
     private var lawTerms: [String: Set<String>] = [:]
     private var lawsByID: [String: Law] = [:]
+    /// Laws in library order (for number search across all laws).
+    private var lawOrder: [String] = []
+    /// In how many articles each term appears.
+    private var df: [String: Int] = [:]
+
+    /// Everyday wording → the words the laws use («رسوم» → «تكاليف قضائية»). Set after loading.
+    struct Concept {
+        let keys: Set<String>
+        let targets: [String]
+    }
+    var concepts: [Concept] = []
 
     init() {}
+
+    /// Reads «synonyms.json»: {"رسوم": "تكاليف قضائية", …}. A key of several words needs all of them.
+    static func concepts(from data: Data) -> [Concept] {
+        guard let raw = try? JSONDecoder().decode([String: String].self, from: data) else { return [] }
+        return raw.compactMap { k, v in
+            let keys = Set(ArabicText.terms(k))
+            let targets = ArabicText.terms(v)
+            return keys.isEmpty || targets.isEmpty ? nil : Concept(keys: keys, targets: targets)
+        }
+    }
+
+    private mutating func finish() {
+        vocabulary = Array(postings.keys)
+        df.reserveCapacity(postings.count)
+        for (t, list) in postings {
+            var n = 0
+            var last: Int32 = -1
+            for d in list where d != last { n += 1; last = d }   // postings are in document order
+            df[t] = n
+        }
+    }
 
     init(laws: [Law]) {
         for law in laws {
             lawsByID[law.id] = law
+            lawOrder.append(law.id)
             lawTerms[law.id] = Set(ArabicText.terms(law.name))
             for a in law.articles {
                 let id = Int32(docs.count)
@@ -40,7 +73,7 @@ struct SearchIndex {
                 }
             }
         }
-        vocabulary = Array(postings.keys)
+        finish()
     }
 
     var isEmpty: Bool { docs.isEmpty }
@@ -52,29 +85,48 @@ struct SearchIndex {
 
     // MARK: query
 
-    /// Which laws the query names («مرافعات», «الإثبات»…), if any.
+    /// Which laws the query names («مرافعات», «الإثبات», «نظام التنفيذ»…), best first: most shared
+    /// words, then a law before its regulation (unless the query says «لائحة»), laws in force before
+    /// repealed ones, then the closest name. Only the best-matching group is returned.
     func lawsNamed(in query: String) -> [String] {
         let q = Set(ArabicText.terms(query))
         guard !q.isEmpty else { return [] }
-        var best: [(String, Int)] = []
-        for (id, terms) in lawTerms {
-            let common = q.intersection(terms).subtracting(["نظام", "لايح", "تنفيذ"]).count
-            if common > 0 { best.append((id, common)) }
+        let wantsReg = ArabicText.fold(query).contains("لايح")
+        var best: [(common: Int, kind: Int, repealed: Int, extra: Int, order: Int, id: String)] = []
+        for (order, id) in lawOrder.enumerated() {
+            guard let terms = lawTerms[id], let law = lawsByID[id] else { continue }
+            let common = q.intersection(terms).subtracting(["نظام", "لايح"]).count
+            guard common > 0 else { continue }
+            var kind = law.kind == .law ? 0 : (law.kind == .reg ? 1 : 2)
+            if wantsReg { kind = law.kind == .reg ? 0 : (law.kind == .law ? 1 : 2) }
+            best.append((common, kind, law.isRepealed ? 1 : 0, terms.subtracting(q).count, order, id))
         }
-        let top = best.map(\.1).max() ?? 0
-        return best.filter { $0.1 == top }.map(\.0)
+        guard let top = best.map({ $0.common }).max() else { return [] }
+        let group = best.filter { $0.common == top }.sorted {
+            ($0.kind, $0.repealed, $0.extra, $0.order) < ($1.kind, $1.repealed, $1.extra, $1.order)
+        }
+        guard let first = group.first else { return [] }
+        return group.filter { $0.kind == first.kind }.map { $0.id }
     }
 
     /// «المادة 30 مرافعات», «م30», «المادة الثلاثون من نظام الإثبات», «1/30».
     func numberLookup(_ query: String, in scope: String?) -> [Article] {
         let folded = " " + ArabicText.fold(query)
+        // «/» is folded away, so «1/30» is read from the query itself (digits made Western first).
+        let raw = String(String.UnicodeScalarView(query.unicodeScalars.map { u -> Unicode.Scalar in
+            switch u.value {
+            case 0x0660...0x0669: return Unicode.Scalar(u.value - 0x0660 + 48)!
+            case 0x06F0...0x06F9: return Unicode.Scalar(u.value - 0x06F0 + 48)!
+            default: return u
+            }
+        }))
         let explicit = folded.range(of: #"\s(الماده|ماده|م)\s*\d"#, options: .regularExpression) != nil
             || folded.range(of: #"\s(الماده|ماده)\s"#, options: .regularExpression) != nil
         let words = ArabicText.tokens(query).filter { !ArabicText.stopwords.contains($0) }
         guard explicit || words.count <= 3 else { return [] }
         var number: String?
-        if let r = folded.range(of: #"\d+\s*/\s*\d+"#, options: .regularExpression) {
-            let pair = folded[r].replacingOccurrences(of: " ", with: "").split(separator: "/")
+        if let r = raw.range(of: #"\d+\s*/\s*\d+"#, options: .regularExpression) {
+            let pair = raw[r].replacingOccurrences(of: " ", with: "").split(separator: "/")
             if pair.count == 2 { number = "\(pair[1]).\(pair[0])" }
         } else if let r = folded.range(of: #"\d+"#, options: .regularExpression) {
             number = String(folded[r])
@@ -84,13 +136,30 @@ struct SearchIndex {
             if let n = ArabicText.ordinal(rest) { number = String(n) }
         }
         guard let number else { return [] }
+        let isPair = number.contains(".")
         var ids = scope.map { [$0] } ?? lawsNamed(in: query)
-        if ids.isEmpty { ids = lawsByID.values.filter { $0.kind == .law }.map(\.id) }
+        if isPair && scope == nil {
+            // «1/30 مرافعات»: numbers with a slash are regulation items of the named law.
+            ids = ids.flatMap { id -> [String] in
+                guard lawsByID[id]?.kind == .law else { return [id] }
+                let regs = lawOrder.filter { lawsByID[$0]?.parent == id && lawsByID[$0]?.kind == .reg }
+                return regs.isEmpty ? [id] : regs
+            }
+        }
+        if ids.isEmpty {
+            // No law named: «1/30» lives in regulations, a plain number in laws; in force first.
+            let pool = lawOrder.compactMap { lawsByID[$0] }.filter { isPair ? $0.kind == .reg : $0.kind == .law }
+            ids = (pool.filter { !$0.isRepealed } + pool.filter(\.isRepealed)).map(\.id)
+        }
         var out: [Article] = []
         for id in ids {
-            if let law = lawsByID[id], let a = law.articles.first(where: { $0.n == number }) { out.append(a) }
+            guard let law = lawsByID[id] else { continue }
+            if let a = law.articles.first(where: { $0.n == number && !$0.isRepealed })
+                ?? law.articles.first(where: { $0.n == number }) {
+                out.append(a)
+            }
         }
-        return out.sorted { $0.lawID < $1.lawID }
+        return out
     }
 
     private static func editDistanceAtMost1(_ a: String, _ b: String) -> Bool {
@@ -112,16 +181,22 @@ struct SearchIndex {
         return edits + (x.count - i) + (y.count - j) <= 1
     }
 
-    /// Terms of the query plus close spellings found in the laws.
+    /// Terms of the query plus close spellings found in the laws. A close spelling is used only
+    /// when it looks like a correction (the typed word is unknown, or the other is far commoner),
+    /// so «اقرار» doesn't also pull in «اسرار» and «اضرار».
     private func expand(_ term: String) -> [(String, Double)] {
         var out: [(String, Double)] = []
-        if postings[term] != nil { out.append((term, 1)) }
-        if term.count >= 3 {
+        let dfT = df[term] ?? 0
+        if dfT > 0 { out.append((term, 1)) }
+        let tn = term.count
+        if tn >= 3 {
             for v in vocabulary where v != term {
-                if v.count > term.count && v.hasPrefix(term) && v.count - term.count <= 3 {
-                    out.append((v, 0.6))
-                } else if term.count >= 4 && SearchIndex.editDistanceAtMost1(term, v) {
-                    out.append((v, 0.7))
+                let vn = v.count
+                if vn > tn && vn - tn <= 2 && v.hasPrefix(term) {
+                    out.append((v, 0.5))
+                } else if (tn >= 4 || (tn == 3 && vn == 4)) && abs(vn - tn) <= 1
+                            && SearchIndex.editDistanceAtMost1(term, v) {
+                    if dfT == 0 || (df[v] ?? 0) >= 8 * dfT { out.append((v, 0.8)) }
                 }
             }
         }
@@ -137,24 +212,39 @@ struct SearchIndex {
         let useTerms = content.isEmpty ? terms : content
         let n = Double(max(docs.count, 1))
 
+        // Groups: each query word, plus one group per concept the query mentions.
+        var groups: [(members: [(String, Double)], concept: Bool)] = useTerms.map { ([($0, 1.0)], false) }
+        let qset = Set(terms)
+        for c in concepts where c.keys.isSubset(of: qset) {
+            let extra = c.targets.filter { !useTerms.contains($0) && !lawWords.contains($0) }
+            if !extra.isEmpty { groups.append((extra.map { ($0, 0.7) }, true)) }
+        }
+        let conceptCount = groups.filter { $0.concept }.count
+
         var scores: [Int32: Double] = [:]
-        var matched: [Int32: Int] = [:]
-        for t in useTerms {
-            var seenForTerm = Set<Int32>()
-            for (v, w) in expand(t) {
-                guard let list = postings[v] else { continue }
-                let idf = log(1 + n / Double(Set(list).count))
-                var tf: [Int32: Int] = [:]
-                for d in list { tf[d, default: 0] += 1 }
-                for (d, c) in tf {
-                    scores[d, default: 0] += w * idf * (1 + log(Double(min(c, 4))))
-                    if !seenForTerm.contains(d) {
-                        seenForTerm.insert(d)
-                        matched[d, default: 0] += 1
+        var matched: [Int32: Double] = [:]
+        for g in groups {
+            var perDoc: [Int32: Double] = [:]
+            for (base, gw) in g.members {
+                let baseIDF = df[base].map { log(1 + n / Double($0)) }
+                for (v, w) in expand(base) {
+                    guard let list = postings[v], let dv = df[v], dv > 0 else { continue }
+                    var idf = log(1 + n / Double(dv))
+                    if w < 1, let baseIDF { idf = min(idf, baseIDF) }   // a variant never outweighs the word typed
+                    var tf: [Int32: Int] = [:]
+                    for d in list { tf[d, default: 0] += 1 }
+                    for (d, c) in tf {
+                        perDoc[d, default: 0] += gw * w * idf * (1 + log(Double(min(c, 4))))
                     }
                 }
             }
+            let cap = (perDoc.values.max() ?? 0) * 1.5
+            for (d, sc) in perDoc {
+                scores[d, default: 0] += g.concept ? min(sc, cap) : sc
+                matched[d, default: 0] += g.concept ? 0.5 : 1
+            }
         }
+        let denom = Double(useTerms.count) + 0.5 * Double(conceptCount)
 
         let phrase = " " + ArabicText.tokens(query).filter { !ArabicText.stopwords.contains($0) }.joined(separator: " ")
         var hits: [SearchHit] = []
@@ -162,13 +252,15 @@ struct SearchIndex {
             let doc = docs[Int(d)]
             if let scope, doc.lawID != scope { continue }
             var score = s
-            let m = Double(matched[d] ?? 0)
-            score *= pow(m / Double(useTerms.count), 2) * 2 + 0.2
+            let m = matched[d] ?? 0
+            score *= pow(min(1, m / denom), 2) * 2 + 0.2
             if useTerms.count > 1 && phrase.count > 4 && doc.folded.contains(phrase) { score *= 2.5 }
             if !doc.headTerms.isDisjoint(with: useTerms) { score *= 1.3 }
             if named.contains(doc.lawID) { score *= 3 }
             if let law = lawsByID[doc.lawID], law.kind == .law { score *= 1.1 }
+            if let law = lawsByID[doc.lawID], law.isPending { score *= 0.8 }
             guard let a = article(doc) else { continue }
+            if a.isRepealed { score *= 0.35 }   // still findable, but below the texts in force
             hits.append(SearchHit(article: a, score: score))
         }
         hits.sort { $0.score > $1.score }
@@ -202,7 +294,7 @@ struct SearchIndex {
 
 extension SearchIndex {
     private static let magic: UInt32 = 0x3158_4941   // "AIX1"
-    private static let version: UInt32 = 1
+    private static let version: UInt32 = 2
 
     func serialized(laws: [Law]) -> Data {
         var w = IndexWriter()
@@ -242,6 +334,7 @@ extension SearchIndex {
                 guard id == law.id, try r.u32() == UInt32(law.articles.count) else { return nil }
                 lawTerms[id] = try Set(r.strs())
                 lawsByID[id] = law
+                lawOrder.append(id)
                 ids.append(id)
             }
             let docCount = try Int(r.u32())
@@ -266,7 +359,7 @@ extension SearchIndex {
         } catch {
             return nil
         }
-        vocabulary = Array(postings.keys)
+        finish()
     }
 }
 

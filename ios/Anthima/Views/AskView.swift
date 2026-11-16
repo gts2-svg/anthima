@@ -16,6 +16,7 @@ struct AskView: View {
     @State private var lastFailed: String?
     @State private var focused = false
     @State private var confirmClear = false
+    @State private var running: Task<Void, Never>?
 
     private var hasKey: Bool { KeyStore.key != nil }
 
@@ -44,6 +45,9 @@ struct AskView: View {
                             Text(verbatim: step).font(F.ui(14)).foregroundStyle(T.muted).lineLimit(2)
                                 .contentTransition(.opacity)
                                 .animation(.easeInOut(duration: 0.25), value: step)
+                            Spacer(minLength: 0)
+                            Button("إيقاف") { stop() }
+                                .font(F.ui(14, .bold)).foregroundStyle(T.red)
                         }
                         .padding(16).frame(maxWidth: .infinity, alignment: .leading).card(radius: 18)
                     }
@@ -148,6 +152,16 @@ struct AskView: View {
                 Text(r.found ? "وجدت نصاً صريحاً" : "ما وجدت نصاً صريحاً")
                     .font(F.ui(12, .semibold))
                     .foregroundStyle(r.found ? T.green : T.sandInk)
+            }
+            if let w = r.warnings, !w.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(w, id: \.self) { line in
+                        Label(line, systemImage: "exclamationmark.triangle.fill")
+                            .font(F.ui(13, .semibold)).foregroundStyle(T.amberInk)
+                    }
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(T.amberSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             Text(verbatim: r.answer)
                 .font(F.text(18))
@@ -343,13 +357,18 @@ struct AskView: View {
         current = nil
         step = "يكيّف السؤال…"
         busy = true
-        Task {
+        running = Task {
             do {
                 let r = try await AskService.ask(q, scope: scope) { s in step = s }
                 await MainActor.run {
                     current = r
                     copied = nil
                     store.remember(r)
+                    busy = false
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    if question.isEmpty { question = q }
                     busy = false
                 }
             } catch {
@@ -362,5 +381,13 @@ struct AskView: View {
                 }
             }
         }
+    }
+
+    /// Stops the question in progress; the question goes back to the input.
+    private func stop() {
+        running?.cancel()
+        running = nil
+        busy = false
+        step = "توقف."
     }
 }

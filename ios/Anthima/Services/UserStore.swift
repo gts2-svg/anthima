@@ -69,7 +69,7 @@ enum KeyStore {
         guard let value, !value.isEmpty, let data = value.data(using: .utf8) else { return }
         var add = base
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
     }
 }

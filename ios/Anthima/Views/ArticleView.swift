@@ -118,11 +118,25 @@ struct ArticlePage: View {
                     if let t = a.title, !t.isEmpty {
                         Text(verbatim: t).font(F.ui(16, .semibold)).foregroundStyle(sec.ink)
                     }
-                    if a.repealed == true {
-                        Text("ملغاة").font(F.ui(12, .bold)).foregroundStyle(T.red)
-                            .padding(.horizontal, 10).padding(.vertical, 3)
-                            .background(Color(hex: 0xFEE2E2), in: Capsule())
+                    if !a.statusLabels.isEmpty || law.isPending {
+                        HStack(spacing: 6) {
+                            ForEach(a.statusLabels + (law.isPending ? ["لم يُعمل به بعد"] : []), id: \.self) { StatusPill(text: $0) }
+                        }
                     }
+                }
+
+                if a.isRepealed {
+                    Label(law.isRepealed ? "هذا النظام ملغى، وهذه المادة غير سارية." : "هذه المادة ملغاة، والنص للاطلاع فقط.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(F.ui(13, .semibold)).foregroundStyle(T.red)
+                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: 0xFEE2E2), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else if a.unverified == true {
+                    Label("قد لا يكون هذا النص محدّثاً. انظر الملاحظة تحت النص، وارجع للنص الرسمي.",
+                          systemImage: "exclamationmark.circle.fill")
+                        .font(F.ui(13, .semibold)).foregroundStyle(T.amberInk)
+                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(T.amberSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
 
                 Text(verbatim: a.text)
@@ -135,7 +149,7 @@ struct ArticlePage: View {
                     .card(isLaw ? .white : Color(hex: 0xFFFBEB), radius: 26)
 
                 if let n = a.note, !n.isEmpty {
-                    Text(verbatim: n).font(F.ui(12)).foregroundStyle(T.muted)
+                    Text(verbatim: n).font(F.ui(13)).foregroundStyle(T.muted).textSelection(.enabled)
                 }
 
                 regulationLinks(a)
@@ -159,7 +173,9 @@ struct ArticlePage: View {
                         .frame(maxWidth: .infinity)
                         .transition(.scale.combined(with: .opacity))
                 }
-                Text(verbatim: law.source ?? "").font(F.ui(11)).foregroundStyle(T.muted).padding(.top, 4)
+                if let src = law.source, !src.isEmpty {
+                    Text(verbatim: src).font(F.ui(12)).foregroundStyle(T.muted).padding(.top, 4)
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 6)

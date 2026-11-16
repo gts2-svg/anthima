@@ -218,9 +218,12 @@ struct ArticleRow: View {
                 } else if article.n.isEmpty, !article.heading.isEmpty {
                     Text(verbatim: article.heading).font(F.ui(14, .semibold)).foregroundStyle(T.ink)
                 }
+                if !article.statusLabels.isEmpty {
+                    HStack(spacing: 6) { ForEach(article.statusLabels, id: \.self) { StatusPill(text: $0) } }
+                }
                 Text(verbatim: preview ?? article.text.replacingOccurrences(of: "\n", with: " "))
                     .font(F.text(15))
-                    .foregroundStyle(article.repealed == true ? T.muted : T.ink)
+                    .foregroundStyle(article.isRepealed ? T.muted : T.ink)
                     .lineLimit(3)
                     .lineSpacing(5)
                     .multilineTextAlignment(.leading)
@@ -276,5 +279,19 @@ struct RoundIcon: View {
             .frame(width: size, height: size)
             .background(Color.white, in: Circle())
             .shadow(color: Color(hex: 0x111827).opacity(0.10), radius: 10, x: 0, y: 4)
+    }
+}
+
+/// A small coloured label: «ملغاة» red, «معدّلة» amber, the rest green.
+struct StatusPill: View {
+    let text: String
+    var body: some View {
+        let red = text == "ملغاة" || text == "لم يُعمل به بعد"
+        let amber = text == "معدّلة" || text == "تحقّق من النص" || text == "مضافة"
+        Text(verbatim: text)
+            .font(F.ui(12, .bold))
+            .foregroundStyle(red ? T.red : (amber ? T.amberInk : T.green))
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            .background(red ? Color(hex: 0xFEE2E2) : (amber ? T.amberSoft : Color(hex: 0xDCFCE7)), in: Capsule())
     }
 }

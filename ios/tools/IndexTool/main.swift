@@ -41,3 +41,16 @@ for (q, scope) in checks {
     guard a == b, na == nb else { fail("results differ for «\(q)»") }
     print("ok  «\(q)»: \(a.count) hits, \(na.count) by number")
 }
+
+// Number search must land on the right article (these failed before Nov 2026).
+let numberChecks: [(String, String, String)] = [
+    ("1/30 مرافعات", "murafaat_reg", "30.1"),
+    ("المادة 34 من نظام التنفيذ", "tanfeeth", "34"),
+    ("م 77 اثبات", "ithbat", "77"),
+    ("المادة الثلاثون مرافعات", "murafaat", "30"),
+]
+for (q, law, n) in numberChecks {
+    guard let first = loaded.numberLookup(q, in: nil).first else { fail("no number hit for «\(q)»") }
+    guard first.lawID == law, first.n == n else { fail("«\(q)» opened \(first.lawID) \(first.n), expected \(law) \(n)") }
+    print("ok  «\(q)» → \(law) \(first.label)")
+}

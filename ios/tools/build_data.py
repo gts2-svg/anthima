@@ -33,12 +33,56 @@ def clean_article(a):
     out.setdefault("label", out["n"])
     out.setdefault("heading", "")
     out.setdefault("text", "")
-    for k in ("amended", "repealed", "added"):
+    for k in ("amended", "repealed", "added", "inForce", "unverified"):
         if a.get(k):
             out[k] = a[k] if isinstance(a[k], (bool, str)) else True
+    if a.get("ref"):
+        out["ref"] = a["ref"]
     if out["text"].startswith(("ملغاة", "ملغى")):
         out["repealed"] = True
     return out
+
+
+TRAIL = re.compile(r"\s*\n\s*ملغا[ةه]\s*$")
+
+
+def mark_repealed_runs(arts):
+    """The site prints «ملغاة» at the end of the text before each repealed article, so a run of
+    consecutive articles ending with it means: every article after the first one is repealed.
+    The marker itself is removed from all of them. A lone marker is only removed."""
+    i = 0
+    while i < len(arts):
+        if not TRAIL.search(arts[i].get("text", "")):
+            i += 1
+            continue
+        j = i
+        while j < len(arts) and TRAIL.search(arts[j].get("text", "")):
+            j += 1
+        for k in range(i, j):
+            arts[k]["text"] = TRAIL.sub("", arts[k]["text"]).rstrip()
+            if k > i:
+                arts[k]["repealed"] = True
+        i = j
+
+
+def fix_duplicates(entry):
+    """Two items with the same number (an old repealed version kept beside the current one):
+    the repealed one gets its own key so links, saves and number search reach the one in force."""
+    seen = {}
+    for i, a in enumerate(entry["articles"]):
+        if not a["n"]:
+            a["n"] = f"x{i + 1}"   # unnumbered items (tables, annexes) still need a unique key
+        n = a["n"]
+        if n not in seen:
+            seen[n] = a
+            continue
+        other = seen[n]
+        old = a if a.get("repealed") or not other.get("repealed") else other
+        if old is other:
+            seen[n] = a
+        old["n"] = n + "~old"
+        old["heading"] = (old.get("heading") or "") + " (النص الملغى)"
+        old["repealed"] = True
 
 
 def split_regs(law):
@@ -59,7 +103,7 @@ def split_regs(law):
             k, art = m.group(1).translate(AR), m.group(2).translate(AR)
             items.append({"n": f"{art}.{k}", "label": f"{k}/{art}", "heading": f"المادة {k}/{art}",
                           "part": a.get("part", ""), "chapter": a.get("chapter", ""), "text": body, "ref": art})
-    return items
+    return [clean_article(x) for x in items]
 
 
 def main():
@@ -73,21 +117,40 @@ def main():
         arts = [clean_article(a) for a in l["articles"]]
         entry = {"id": l["id"], "name": l["name"], "cat": l.get("cat", "qadaa"), "kind": kind_of(l["name"]),
                  "decree": l.get("decree", ""), "source": l.get("source", ""), "articles": arts}
+        if l.get("status"):
+            entry["status"] = l["status"]
         if parent:
             entry["parent"] = parent
         out.append(entry)
 
+    replacements = {l["id"]: l for l in extra if l["id"] in have and l.get("replace")}
     for l in site:
+        l = replacements.get(l["id"], l)
         add(l)
+        law = out[-1]
+        mark_repealed_runs(law["articles"])
         regs = split_regs(l)
         if regs:
-            out.append({"id": l["id"] + "_reg", "name": REG_NAME.get(l["id"], "اللائحة التنفيذية لـ" + l["name"]),
-                        "cat": l.get("cat", "qadaa"), "kind": "reg", "decree": "", "source": l.get("source", ""),
-                        "parent": l["id"], "articles": regs})
+            mark_repealed_runs(regs)
+            # The regulation of a repealed article goes with it; of an article kept in force, likewise.
+            gone = {a["n"] for a in law["articles"] if a.get("repealed")}
+            kept = {a["n"] for a in law["articles"] if a.get("inForce")}
+            for r in regs:
+                if r.get("ref") in gone:
+                    r["repealed"] = True
+                if r.get("ref") in kept:
+                    r["inForce"] = True
+            reg = {"id": l["id"] + "_reg", "name": REG_NAME.get(l["id"], "اللائحة التنفيذية لـ" + l["name"]),
+                   "cat": l.get("cat", "qadaa"), "kind": "reg", "decree": "", "source": l.get("source", ""),
+                   "parent": l["id"], "articles": regs}
+            if l.get("status"):
+                reg["status"] = l["status"]
+            out.append(reg)
     for l in extra:
         if l["id"] in have:
             continue
         add(l)
+        mark_repealed_runs(out[-1]["articles"])
 
     # link each regulation / rules entry to its law by name
     by_name = {l["name"]: l["id"] for l in out if l["kind"] == "law"}
@@ -98,8 +161,28 @@ def main():
                     l["parent"] = lid
                     break
 
+    # Checks: a build with these problems must not reach the phone.
+    errors, warnings = [], []
+    for l in out:
+        fix_duplicates(l)
+        nums = [a["n"] for a in l["articles"]]
+        dup = {n for n in nums if nums.count(n) > 1}
+        if dup:
+            errors.append(f"{l['id']}: أرقام مكررة {sorted(dup)[:6]}")
+        for a in l["articles"]:
+            if not a["text"].strip() and "جدول" not in (a.get("heading", "") + a.get("title", "")):
+                warnings.append(f"{l['id']} {a['label']}: نص فاضي")
+    for w in warnings:
+        print("تنبيه:", w)
+    if errors:
+        for e in errors:
+            print("خطأ:", e)
+        sys.exit(1)
+
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    data = {"version": 1, "categories": [{"id": c, "name": n} for c, n in CATS], "laws": out}
+    version = json.load(open(SITE)).get("version", "")
+    data = {"version": 1, "dataVersion": version,
+            "categories": [{"id": c, "name": n} for c, n in CATS], "laws": out}
     json.dump(data, open(OUT, "w"), ensure_ascii=False, separators=(",", ":"))
     total = sum(len(l["articles"]) for l in out)
     print(len(out), "entries,", total, "articles,", os.path.getsize(OUT) // 1024, "KB")

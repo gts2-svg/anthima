@@ -4,13 +4,18 @@ name: testflight
 # Runs on changes to the app, on the 1st of each month (so the 90-day TestFlight build
 # never expires), and on demand. A cheap Linux check runs first, so nothing spends macOS
 # minutes until the four Apple secrets exist.
+# Not on every push any more (each run spends macOS minutes): on demand and monthly only.
 on:
-  push:
-    branches: [main]
-    paths: ["ios/**", "laws.json", ".github/workflows/testflight.yml"]
   schedule:
     - cron: "0 3 1 * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight
+  cancel-in-progress: true
 
 jobs:
   gate:
@@ -37,13 +42,10 @@ jobs:
     if: needs.gate.outputs.ready == 'true'
     runs-on: macos-15-intel
     timeout-minutes: 60
-    env:
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Select newest Xcode
         run: |
@@ -69,6 +71,11 @@ jobs:
           xcodegen generate
 
       - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         working-directory: ios
         run: |
           mkdir -p "$RUNNER_TEMP/keys"
@@ -85,6 +92,11 @@ jobs:
           test -d "$RUNNER_TEMP/Anthima.xcarchive" || { tail -n 60 archive.log; exit 1; }
 
       - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           KEY="$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF

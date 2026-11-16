@@ -8,8 +8,18 @@ enum ArabicText {
         var out = String.UnicodeScalarView()
         out.reserveCapacity(s.unicodeScalars.count)
         let space = Unicode.Scalar(UInt32(32))!
-        for u in s.unicodeScalars {
+        let scalars = Array(s.unicodeScalars)
+        var i = 0
+        while i < scalars.count {
+            let u = scalars[i]
             let v = u.value
+            i += 1
+            // The alif that carries tanween fath is not part of the word: «قضائياً» = «قضائي».
+            if v == 0x0627, i < scalars.count, scalars[i].value == 0x064B { continue }
+            if v == 0x064B {
+                if i < scalars.count, scalars[i].value == 0x0627 { i += 1 }
+                continue
+            }
             switch v {
             case 0x064B...0x0655, 0x0670, 0x0640:      // tashkeel and tatweel
                 continue
@@ -47,7 +57,12 @@ enum ArabicText {
         "التي", "الذي", "الذين", "هذا", "هذه", "ذلك", "تلك", "مع", "عند", "كل", "بين", "ثم", "قد", "لم",
         "لن", "اذا", "اي", "ايش", "وش", "ليش", "يعني", "و", "ف", "ب", "ل", "ك", "به", "بها", "له", "لها",
         "فيه", "فيها", "منه", "منها", "عليه", "عليها", "كان", "يكون", "تكون", "ذا", "اللي", "وين", "شو",
-        "المادة", "الماده", "ماده", "نظام", "النظام", "لائحه", "اللائحه"
+        "الماده", "ماده", "نظام", "النظام", "لايحه", "اللايحه",
+        // everyday Saudi words that carry no meaning for the search
+        "ابي", "ابغي", "ابا", "ودي", "عشان", "علشان", "لاجل", "واحد", "واحده", "عنده", "عندي", "عندها",
+        "كم", "اسوي", "يسوي", "تسوي", "يبي", "تبي", "يبغي", "تبغي", "نبي", "لو", "مو", "مب", "الحين",
+        "شلون", "طيب", "يا", "انا", "احنا", "اني", "هذي", "هاذا", "وشو", "ايه", "اقدر", "يقدر", "تقدر",
+        "لازم", "ممكن"
     ]
 
     private static let prefixes = ["وبال", "وال", "بال", "كال", "فال", "لل", "ال", "و", "ف", "ب", "ل", "ك"]
