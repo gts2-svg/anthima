@@ -57,7 +57,7 @@ struct SearchView: View {
     private var field: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.accent)
-            TextField("", text: $query, prompt: Text("اكتب المعنى أو رقم المادة").foregroundStyle(T.muted))
+            TextField("", text: $query, prompt: Text("اكتب الكلمة أو المعنى أو رقم المادة").foregroundStyle(T.muted))
                 .font(F.ui(16))
                 .focused($focused)
                 .submitLabel(.search)
@@ -122,8 +122,8 @@ struct SearchView: View {
                     .foregroundStyle(T.accent)
                     .frame(width: 72, height: 72)
                     .background(T.accentSoft, in: Circle())
-                Text("اكتب بالمعنى أو برقم المادة").font(F.ui(16, .semibold)).foregroundStyle(T.ink)
-                Text("ولو فيها خطأ إملائي، يفهمها.").font(F.ui(14)).foregroundStyle(T.muted)
+                Text("اكتب الكلمة أو المعنى أو رقم المادة").font(F.ui(16, .semibold)).foregroundStyle(T.ink)
+                Text("يتحمّل الأخطاء الإملائية، ويفهم بعض الكلام الدارج. والمواد الملغاة تنزل تحت.").font(F.ui(14)).foregroundStyle(T.muted)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, store.recentSearches.isEmpty ? 50 : 24)
@@ -137,7 +137,7 @@ struct SearchView: View {
                 ForEach(numbered) { a in link(a, preview: nil) }
             }
             if !hits.isEmpty {
-                Text(verbatim: "بالمعنى · \(hits.count)").font(F.ui(13, .bold)).foregroundStyle(T.muted).padding(.top, numbered.isEmpty ? 0 : 8)
+                Text(verbatim: "النتائج · \(hits.count)").font(F.ui(13, .bold)).foregroundStyle(T.muted).padding(.top, numbered.isEmpty ? 0 : 8)
                 ForEach(hits) { h in link(h.article, preview: SearchIndex.snippet(h.article.text, query: query)) }
             }
         }
@@ -147,7 +147,7 @@ struct SearchView: View {
         Button {
             store.rememberSearch(query)
             nav.open(.article(a.key))
-        } label: { ArticleRow(article: a, preview: preview, showLaw: true) }
+        } label: { ArticleRow(article: a, preview: preview, showLaw: true, highlight: preview == nil ? nil : query) }
             .buttonStyle(.press)
             .softScroll()
     }

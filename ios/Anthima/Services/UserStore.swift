@@ -82,11 +82,24 @@ enum Clipboard {
 
     /// «نصت المادة (الثلاثون) من نظام المرافعات الشرعية على أن: «…»».
     static func forReasoning(_ a: Article, law: Law?) -> String {
-        let lawName = law?.name ?? ""
+        // The law's name without status notes («— ملغى…», «— لم يُعمل به بعد») in a ruling.
+        let lawName = (law?.name ?? "").components(separatedBy: " — ").first ?? ""
         let text = a.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        var which = a.heading.replacingOccurrences(of: "المادة ", with: "")
+        let heading = a.heading.trimmingCharacters(in: .whitespaces)
+        // A table or annex isn't «المادة (…)».
+        if a.n.hasPrefix("x") || heading.contains("جدول") || heading.contains("ملحق") {
+            return "وحيث ورد في \(heading.isEmpty ? "ملحق" : heading) من \(lawName): «\(text)»"
+        }
+        var which = heading.replacingOccurrences(of: "المادة ", with: "").replacingOccurrences(of: " (النص الملغى)", with: "")
         if which.isEmpty { which = a.label }
-        return "وحيث نصت المادة (\(which)) من \(lawName) على أن: «\(text)»"
+        return "وحيث نصت المادة (\(arabicDigits(which))) من \(arabicDigits(lawName)) على أن: «\(text)»"
+    }
+
+    /// One digit style in a ruling: «(٣٠/١)» like «(١٤٤٧هـ)».
+    static func arabicDigits(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.unicodeScalars.map { u -> Unicode.Scalar in
+            (48...57).contains(u.value) ? Unicode.Scalar(u.value - 48 + 0x0660)! : u
+        }))
     }
 
     static func plain(_ a: Article, law: Law?) -> String {

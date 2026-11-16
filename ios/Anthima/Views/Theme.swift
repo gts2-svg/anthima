@@ -199,6 +199,25 @@ struct ArticleRow: View {
     let article: Article
     var preview: String? = nil
     var showLaw = false
+    /// The search words to mark in the preview.
+    var highlight: String? = nil
+
+    /// The preview with the words that matched the search in bold and coloured.
+    static func marked(_ text: String, query: String) -> AttributedString {
+        let terms = ArabicText.terms(query)
+        var out = AttributedString()
+        for (i, w) in text.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
+            if i > 0 { out += AttributedString(" ") }
+            var piece = AttributedString(String(w))
+            let t = ArabicText.stem(ArabicText.fold(String(w)).replacingOccurrences(of: " ", with: ""))
+            if t.count >= 2, terms.contains(where: { t.hasPrefix($0) || ($0.hasPrefix(t) && t.count >= 3) }) {
+                piece.inlinePresentationIntent = .stronglyEmphasized
+                piece.foregroundColor = T.accent
+            }
+            out += piece
+        }
+        return out
+    }
 
     var body: some View {
         let law = Library.shared.law(article.lawID)
@@ -221,7 +240,14 @@ struct ArticleRow: View {
                 if !article.statusLabels.isEmpty {
                     HStack(spacing: 6) { ForEach(article.statusLabels, id: \.self) { StatusPill(text: $0) } }
                 }
-                Text(verbatim: preview ?? article.text.replacingOccurrences(of: "\n", with: " "))
+                Group {
+                    let body = preview ?? article.text.replacingOccurrences(of: "\n", with: " ")
+                    if let highlight, !highlight.isEmpty {
+                        Text(ArticleRow.marked(body, query: highlight))
+                    } else {
+                        Text(verbatim: body)
+                    }
+                }
                     .font(F.text(15))
                     .foregroundStyle(article.isRepealed ? T.muted : T.ink)
                     .lineLimit(3)

@@ -82,7 +82,27 @@ struct LawView: View {
             Text(verbatim: "\(law.kind.label) · \(law.countText)" + partsText)
                 .font(F.ui(13)).foregroundStyle(T.muted)
             if let d = law.decree, !d.isEmpty {
-                Text(verbatim: d).font(F.ui(12)).foregroundStyle(T.muted)
+                Text(verbatim: d).font(F.ui(13)).foregroundStyle(T.muted)
+            }
+            if law.isRepealed || law.isPending {
+                Label(law.isPending ? "لم يُعمل به بعد" : "ملغى، وما بقي منه سارياً عليه علامة «سارية استثناءً»",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(F.ui(13, .semibold)).foregroundStyle(T.red)
+            }
+            if let src = law.source, !src.isEmpty {
+                Text(verbatim: src).font(F.ui(12)).foregroundStyle(T.muted).lineLimit(4)
+            }
+            if let cmp = Comparisons.covering(law.id) {
+                Button { nav.open(.comparison(cmp.key)) } label: {
+                    Label("مقارنة النظام القديم بالجديد", systemImage: "arrow.left.arrow.right")
+                        .font(F.ui(13, .semibold))
+                        .foregroundStyle(T.accent)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 38)
+                        .background(Color.white, in: Capsule())
+                }
+                .buttonStyle(.press)
+                .padding(.top, 4)
             }
             if let parent {
                 Button { nav.open(.law(parent.id)) } label: {
@@ -162,13 +182,13 @@ struct LawView: View {
     static func shortPart(_ p: String) -> String {
         if let r = p.range(of: ":") {
             let rest = p[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            if !rest.isEmpty { return String(rest.prefix(28)) }
+            if !rest.isEmpty { return rest.count > 30 ? String(rest.prefix(28)) + "…" : rest }
         }
         let words = p.split(separator: " ")
         if words.count > 2, ["الباب", "الفصل", "الفرع", "القسم"].contains(String(words[0])) {
-            return words.dropFirst(2).joined(separator: " ").prefix(28).description
+            let r = words.dropFirst(2).joined(separator: " "); return r.count > 30 ? String(r.prefix(28)) + "…" : r
         }
-        return String(p.prefix(28))
+        return p.count > 30 ? String(p.prefix(28)) + "…" : p
     }
 
     @ViewBuilder

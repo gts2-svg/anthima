@@ -42,7 +42,9 @@ struct ArticleView: View {
                 store.lastRead = currentArticle.key
             }
             .sensoryFeedback(.selection, trigger: current)
-            .navigationTitle(Text(verbatim: "\(position + 1) من \(law.articles.count)"))
+            .navigationTitle(Text(verbatim: currentArticle.label.isEmpty
+                                  ? "\(position + 1) من \(law.articles.count)"
+                                  : "المادة \(currentArticle.label) · \(position + 1) من \(law.articles.count)"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -154,6 +156,7 @@ struct ArticlePage: View {
 
                 regulationLinks(a)
                 parentLink(a)
+                counterpartLinks(a)
 
                 HStack(spacing: 10) {
                     tile("نسخ", icon: "doc.on.doc") {
@@ -180,6 +183,31 @@ struct ArticlePage: View {
             .padding(.horizontal, 20)
             .padding(.top, 6)
             .padding(.bottom, 24)
+        }
+    }
+
+    /// In the old/new comparison: what this article became, or what it replaced.
+    @ViewBuilder
+    private func counterpartLinks(_ a: Article) -> some View {
+        if let found = Comparisons.counterparts(of: a) {
+            let others = found.keys.compactMap { lib.article(key: $0) }
+            VStack(alignment: .leading, spacing: 8) {
+                Label(law.isRepealed ? "يقابلها في النظام الجديد" : "يقابلها في النظام القديم", systemImage: "arrow.left.arrow.right")
+                    .font(F.ui(13, .bold)).foregroundStyle(T.muted)
+                if let note = found.rows.first?.note, !note.isEmpty {
+                    Text(verbatim: note).font(F.ui(14)).foregroundStyle(T.ink)
+                }
+                ForEach(others) { o in
+                    Button { nav.open(.article(o.key)) } label: {
+                        ArticleRow(article: o, showLaw: true)
+                    }
+                    .buttonStyle(.press)
+                }
+                Button { nav.open(.comparison(found.cmp.key)) } label: {
+                    Text("المقارنة كاملة").font(F.ui(13, .semibold)).foregroundStyle(T.accent)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

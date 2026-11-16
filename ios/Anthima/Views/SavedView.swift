@@ -9,6 +9,7 @@ struct SavedView: View {
         let items = store.saved.compactMap { Library.shared.article(key: $0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
+                Text("المحفوظات").font(F.title(28)).foregroundStyle(T.ink).padding(.top, 4).padding(.bottom, 6)
                 if items.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "bookmark")
@@ -23,7 +24,6 @@ struct SavedView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 80)
                 }
-                Text("المحفوظات").font(F.title(28)).foregroundStyle(T.ink).padding(.top, 4).padding(.bottom, 6)
                 ForEach(items) { a in
                     Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, showLaw: true) }
                         .buttonStyle(.press)
@@ -119,6 +119,7 @@ struct SettingsView: View {
                 LabeledContent("الأنظمة واللوائح", value: "\(Library.shared.laws.count)")
                 LabeledContent("المواد", value: "\(Library.shared.articleCount)")
                 LabeledContent("الإصدار", value: Self.version)
+                LabeledContent("تاريخ نصوص المكتبة", value: Library.shared.dataVersion.isEmpty ? "—" : Library.shared.dataVersion)
             }
         }
         .navigationTitle("الإعدادات")

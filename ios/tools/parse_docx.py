@@ -17,7 +17,22 @@ DOCS = {
     "اللائحة التنفيذية لنظام التسجيل العيني للعقار": ("tasjeelreg", "aqari"),
     "نظام الشركات": ("sharikat", "tijari"),
 }
-NOISE = {"آخر تعديل", "النص الأصلي والتعديلات السابقة", "المادة الأصلية"}
+NOISE = {"آخر تعديل", "النص الأصلي والتعديلات السابقة", "المادة الأصلية", "تفاصيل إضافة المادة", "مضافة"}
+# Lines that record an amendment: kept as the article's note (not dropped), and the article is marked.
+AMEND = re.compile(r"^(عُ?دِّ?لت|عدلت|أُ?ضيفت|اضيفت|أضيفت|حُ?ذفت|ألغيت|أُلغيت)\s+(هذه|هذا)?")
+DECREE = re.compile(r"(المرسوم الملكي|مرسوم ملكي|قرار مجلس الوزراء)\s+رقم\s*\(?[^)]{1,12}\)?\s*(وتاريخ|بتاريخ)\s*[0-9٠-٩/]+\s*هـ?")
+TITLE = re.compile(r"^(نظام|اللائحة|لائحة|القواعد|قواعد|ضوابط|الضوابط|الأدلة|الدليل)\s.{3,90}$")
+LETTERS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي", "ك", "ل", "م", "ن"]
+AR = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+
+
+def numbering(p):
+    """Word's automatic list numbering is not in the text: (numId, level) of the paragraph, if any."""
+    ppr = p._p.pPr
+    if ppr is None or ppr.numPr is None or ppr.numPr.numId is None:
+        return None
+    lvl = ppr.numPr.ilvl.val if ppr.numPr.ilvl is not None else 0
+    return ppr.numPr.numId.val, lvl
 
 UNITS = {"الأولى": 1, "الأول": 1, "الحادية": 1, "الحادي": 1, "الثانية": 2, "الثاني": 2,
          "الثالثة": 3, "الثالث": 3, "الرابعة": 4, "الرابع": 4, "الخامسة": 5, "الخامس": 5,
@@ -100,13 +115,27 @@ def parse(path):
         art = None
 
     items = []
+    counters = {}
     for b in blocks(doc):
         if isinstance(b, Table):
             items.append(("table", table_text(b)))
             continue
         t = re.sub(r"[\u200b]+", "", b.text).replace("\xa0", " ").strip()
-        if t and t not in NOISE:
-            items.append(("p", t))
+        if not t or t in NOISE:
+            continue
+        if re.match(r"^(?:المادة|مادة)\s", t):
+            counters = {}   # each article starts its own paragraph numbers
+        num = numbering(b)
+        if num and not re.match(r"^[0-9٠-٩]+\s*[-–.)]|^[أ-ي]\s*[-–)]", t):
+            numId, lvl = num
+            key = (numId, lvl)
+            counters[key] = counters.get(key, 0) + 1
+            for k in list(counters):   # a new item at this level restarts deeper levels
+                if k[0] == numId and k[1] > lvl:
+                    del counters[k]
+            c = counters[key]
+            t = (str(c).translate(AR) + "- " if lvl == 0 else LETTERS[(c - 1) % len(LETTERS)] + "- ") + t
+        items.append(("p", t))
 
     def is_heading(t):
         m = re.match(r"^(?:المادة|مادة)\s+([^:：]+?)\s*(?:[:：]\s*(.*))?$", t)
@@ -131,7 +160,13 @@ def parse(path):
                 art["text"] += ("\n" if art["text"] else "") + t
             continue
         title = t.rstrip(".").strip()
-        if title in DOCS:
+        known = title in DOCS
+        if not known and TITLE.match(title) and next_is_heading(k) and (cur is None or cur["articles"]):
+            # A document not listed in DOCS yet: take it anyway with a temporary id, and say so.
+            DOCS[title] = (f"new{len(laws) + 1}", "qadaa")
+            print(f"تنبيه: «{title}» غير موجود في DOCS؛ أُخذ بالمعرّف المؤقت {DOCS[title][0]}. عدّل المعرّف والقسم قبل الإضافة.")
+            known = True
+        if known:
             close_article()
             lid, cat = DOCS[title]
             cur = {"id": lid, "name": title, "cat": cat, "decree": "", "partial": False,
@@ -142,6 +177,15 @@ def parse(path):
             has_bab = False
             continue
         if cur is None:
+            continue
+        if not cur["articles"] and art is None and not cur["decree"]:
+            m = DECREE.search(t)
+            if m:
+                cur["decree"] = m.group(0)
+                continue
+        if art is not None and AMEND.match(t) and len(t) < 400:
+            art["note"] = (art.get("note", "") + "\n" + t).strip()
+            art["amended"] = True
             continue
         h = is_heading(t)
         if h:

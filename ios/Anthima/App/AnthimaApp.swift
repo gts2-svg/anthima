@@ -14,6 +14,7 @@ enum Nav: Hashable {
     case category(String)
     case law(String)
     case article(String)
+    case comparison(String)
     case settings
 }
 
@@ -116,6 +117,7 @@ struct RootView: View {
         case .category(let id): CategoryView(catID: id).zoomDestination("cat-\(id)", in: zoom)
         case .law(let id): LawView(lawID: id).zoomDestination("law-\(id)", in: zoom)
         case .article(let key): ArticleView(startKey: key)
+        case .comparison(let key): ComparisonView(key: key)
         case .settings: SettingsView()
         }
     }

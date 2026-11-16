@@ -38,6 +38,12 @@ def clean_article(a):
             out[k] = a[k] if isinstance(a[k], (bool, str)) else True
     if a.get("ref"):
         out["ref"] = a["ref"]
+    # «الباب الأول · الفصل الأول» in the part field: keep the part, move the rest to the chapter.
+    part = out.get("part", "")
+    if " · " in part:
+        head, tail = part.split(" · ", 1)
+        out["part"] = head
+        out["chapter"] = tail + (" · " + out["chapter"] if out.get("chapter") else "")
     if out["text"].startswith(("ملغاة", "ملغى")):
         out["repealed"] = True
     return out
@@ -106,6 +112,103 @@ def split_regs(law):
     return [clean_article(x) for x in items]
 
 
+# ---- linking regulation items to the law articles they apply («المادة (الرابعة) من النظام»)
+
+def _fold(s):
+    out = []
+    for ch in s:
+        v = ord(ch)
+        if 0x064B <= v <= 0x0655 or v in (0x0670, 0x0640):
+            continue
+        if v in (0x0623, 0x0625, 0x0622, 0x0671): out.append("ا")
+        elif v == 0x0629: out.append("ه")
+        elif v == 0x0649: out.append("ي")
+        elif v == 0x0624: out.append("و")
+        elif v == 0x0626: out.append("ي")
+        elif 0x0660 <= v <= 0x0669: out.append(chr(v - 0x0660 + 48))
+        elif 0x0621 <= v <= 0x063A or 0x0641 <= v <= 0x064A or 48 <= v <= 57: out.append(ch)
+        else: out.append(" ")
+    return "".join(out)
+
+
+_UNITS = {"الاولي": 1, "الاول": 1, "الحاديه": 1, "الحادي": 1, "الثانيه": 2, "الثاني": 2, "الثالثه": 3, "الثالث": 3,
+          "الرابعه": 4, "الرابع": 4, "الخامسه": 5, "الخامس": 5, "السادسه": 6, "السادس": 6, "السابعه": 7, "السابع": 7,
+          "الثامنه": 8, "الثامن": 8, "التاسعه": 9, "التاسع": 9, "العاشره": 10, "العاشر": 10}
+_TENS = {"العشرون": 20, "العشرين": 20, "الثلاثون": 30, "الثلاثين": 30, "الاربعون": 40, "الاربعين": 40,
+         "الخمسون": 50, "الخمسين": 50, "الستون": 60, "الستين": 60, "السبعون": 70, "السبعين": 70,
+         "الثمانون": 80, "الثمانين": 80, "التسعون": 90, "التسعين": 90}
+_HUND = {"الماييه": 100, "المييه": 100, "المايه": 100, "الميه": 100, "المايتين": 200, "الميتين": 200}
+
+
+def _ordinal(words):
+    total, seen = 0, False
+    for i, w in enumerate(words):
+        if w == "بعد":
+            continue
+        if w in _HUND: total += _HUND[w]; seen = True; continue
+        if w.startswith("و") and w[1:] in _TENS: w = w[1:]
+        if w in _UNITS: total += _UNITS[w]; seen = True
+        elif w in _TENS: total += _TENS[w]; seen = True
+        elif w in ("عشره", "عشر"): total += 10; seen = True
+        elif seen: break
+        else: return None
+    return total if seen else None
+
+
+REF = re.compile(r"(?:الماده|للماده|بالماده|وفق الماده)\s+([0-9]+|(?:\S+\s+){0,4}?\S+)\s+من\s+النظام")
+
+
+def link_regs(out):
+    """Regulations that don't say which article each item applies get a `ref` from the text."""
+    laws = {l["id"]: l for l in out}
+    for l in out:
+        parent = laws.get(l.get("parent", ""))
+        if l["kind"] != "reg" or not parent:
+            continue
+        nums = {a["n"] for a in parent["articles"]}
+        added = 0
+        for a in l["articles"]:
+            if a.get("ref"):
+                continue
+            for m in REF.finditer(_fold(a.get("text", ""))):
+                g = m.group(1).strip()
+                n = g if g.isdigit() else (str(_ordinal(g.split())) if _ordinal(g.split()) else None)
+                if n and n in nums:
+                    a["ref"] = n
+                    added += 1
+                    break
+        if added:
+            print(f"  ربط {added} من مواد {l['id']} بمواد النظام")
+
+
+CMP = os.path.join(ROOT, "cmp-ready.json")
+CMP_OUT = os.path.join(ROOT, "ios", "Anthima", "Resources", "comparisons.json")
+
+
+def write_comparisons():
+    """The ready old-vs-new reports (made once, on the web version) as a small file for the app:
+    the report sections and the article-by-article map, without the working notes."""
+    if not os.path.exists(CMP):
+        return
+    out = []
+    for key, r in json.load(open(CMP)).items():
+        cfg = r.get("cfg", {})
+        secs = []
+        for sp in r.get("specs", []):
+            if sp.get("kind") not in ("sec", "removed"):
+                continue
+            t = (r.get("secs", {}).get(sp["key"], {}) or {}).get("text", "")
+            if t:
+                secs.append({"key": sp["key"], "title": sp.get("title", ""), "text": t})
+        m = r.get("map", {}) or {}
+        out.append({"key": key, "oldLaw": cfg.get("oLaw", ""), "oldReg": cfg.get("oReg", ""),
+                    "newLaw": cfg.get("nLaw", ""), "newReg": cfg.get("nReg", ""),
+                    "sections": secs, "lawMap": m.get("law", []), "regMap": m.get("reg", [])})
+    os.makedirs(os.path.dirname(CMP_OUT), exist_ok=True)
+    json.dump(out, open(CMP_OUT, "w"), ensure_ascii=False, separators=(",", ":"))
+    print("comparisons:", len(out))
+
+
 def main():
     site = json.load(open(SITE))["laws"]
     site.sort(key=lambda l: float(l.get("order", 999)))
@@ -161,6 +264,8 @@ def main():
                     l["parent"] = lid
                     break
 
+    link_regs(out)
+
     # Checks: a build with these problems must not reach the phone.
     errors, warnings = [], []
     for l in out:
@@ -178,6 +283,8 @@ def main():
         for e in errors:
             print("خطأ:", e)
         sys.exit(1)
+
+    write_comparisons()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     version = json.load(open(SITE)).get("version", "")
