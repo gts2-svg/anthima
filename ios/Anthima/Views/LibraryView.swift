@@ -56,7 +56,7 @@ struct LibraryView: View {
     private var searchPill: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.accent)
-            TextField("", text: $query, prompt: Text("ابحث بالمعنى أو برقم المادة").foregroundStyle(T.muted))
+            TextField("", text: $query, prompt: Text("اكتب الكلمة أو المعنى أو رقم المادة").foregroundStyle(T.muted))
                 .font(F.ui(16))
                 .foregroundStyle(T.ink)
                 .submitLabel(.search)
