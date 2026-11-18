@@ -95,7 +95,7 @@ jobs:
           PID=$(xcrun simctl launch "$UDID" com.gts2svg.anthima.9QR9KTSAZ9 -screen home | awk '{print $NF}')
           wait_ready "$PID" 240
           echo "warm-up: $STATE after ${i}s — $(cat "$DATA/Documents/demo-ready.txt" 2>/dev/null)"
-          for s in home category law article regarticle search number ask saved settings; do
+          for s in home category law article explain rules regarticle search number ask saved settings; do
             xcrun simctl terminate "$UDID" com.gts2svg.anthima.9QR9KTSAZ9 2>/dev/null || true
             DATA=$(xcrun simctl get_app_container "$UDID" com.gts2svg.anthima.9QR9KTSAZ9 data)
             rm -f "$DATA/Documents/demo-ready.txt"

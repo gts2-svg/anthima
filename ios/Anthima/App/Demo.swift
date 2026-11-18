@@ -1,7 +1,7 @@
 #if DEBUG
 import Foundation
 
-/// Screenshots on the build machine: `-screen home|law|article|search|ask|saved|settings`.
+/// Screenshots on the build machine: `-screen home|law|article|explain|rules|search|ask|saved|settings`.
 enum Demo {
     static var screen: String? {
         let args = ProcessInfo.processInfo.arguments
@@ -23,6 +23,14 @@ enum Demo {
         case "reg": nav.library = [.law("murafaat_reg")]
         case "article": nav.library = [.article("murafaat|30")]
         case "regarticle": nav.library = [.article("murafaat_reg|30.1")]
+        case "explain":
+            UserDefaults.standard.set(true, forKey: "explain.sharhOpen")
+            UserDefaults.standard.set(true, forKey: "explain.mithalOpen")
+            nav.library = [.article("madani|120")]
+        case "rules":
+            UserDefaults.standard.set(false, forKey: "explain.sharhOpen")
+            UserDefaults.standard.set(false, forKey: "explain.mithalOpen")
+            nav.library = [.article("madani|720")]
         case "search": nav.tab = 1; nav.searchDraft = "مدة الاستئناف"
         case "number": nav.tab = 1; nav.searchDraft = "المادة الثلاثون مرافعات"
         case "ask": nav.tab = 2
