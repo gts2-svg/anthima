@@ -52,11 +52,18 @@ struct RootView: View {
     @ObservedObject private var lib = Library.shared
     @ObservedObject private var nav = AppNav.shared
     @State private var splashDone = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         ZStack {
             if lib.isLoaded {
-                tabs
+                // iPad (or any wide window): its own arrangement. iPhone, and an iPad app in a
+                // narrow Split View window: the iPhone tabs, unchanged.
+                if sizeClass == .regular {
+                    PadRoot()
+                } else {
+                    tabs
+                }
             }
             if !lib.isLoaded || !splashDone {
                 SplashView()
@@ -71,6 +78,7 @@ struct RootView: View {
             if left > 0 { try? await Task.sleep(nanoseconds: UInt64(left * 1_000_000_000)) }
             #if DEBUG
             Demo.apply()
+            await Demo.rotateIfAsked()
             #endif
             withAnimation(.easeOut(duration: 0.35)) { splashDone = true }
             #if DEBUG
@@ -126,6 +134,7 @@ struct RootView: View {
 /// The opening cover: soft morning colours, the title and the name.
 struct SplashView: View {
     @State private var shown = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         ZStack {
@@ -137,10 +146,10 @@ struct SplashView: View {
                     .foregroundStyle(T.accent)
                     .padding(.bottom, 6)
                 Text("مكتبة الأنظمة الخاصة")
-                    .font(F.title(30))
+                    .font(F.title(sizeClass == .regular ? 40 : 30))
                     .foregroundStyle(T.ink)
                 Text("جبران طالع التليدي")
-                    .font(F.ruqaa(22))
+                    .font(F.ruqaa(sizeClass == .regular ? 29 : 22))
                     .foregroundStyle(T.gold)
             }
             .scaleEffect(shown ? 1 : 0.92)

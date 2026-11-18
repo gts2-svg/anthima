@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import UIKit
 
 /// Screenshots on the build machine: `-screen home|law|article|explain|rules|search|ask|saved|settings`.
 enum Demo {
@@ -38,6 +39,14 @@ enum Demo {
         case "settings": nav.library = [.settings]
         default: break
         }
+    }
+
+    /// `-landscape`: turn the iPad sideways for the landscape screenshots.
+    @MainActor
+    static func rotateIfAsked() {
+        guard ProcessInfo.processInfo.arguments.contains("-landscape"),
+              let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
     }
 
     /// When the system started this process — to tell the system's own launch time apart from the app's.

@@ -201,6 +201,8 @@ struct ArticleRow: View {
     var showLaw = false
     /// The search words to mark in the preview.
     var highlight: String? = nil
+    /// iPad: this is the article open beside the list.
+    var selected = false
 
     /// The preview with the words that matched the search in bold and coloured.
     static func marked(_ text: String, query: String) -> AttributedString {
@@ -226,8 +228,8 @@ struct ArticleRow: View {
         let isLaw = law?.kind == .law
         HStack(alignment: .top, spacing: 14) {
             NumberBadge(text: article.badge,
-                        soft: saved ? T.amberSoft : (isLaw ? T.accentSoft : T.amberSoft),
-                        ink: saved ? T.amberInk : (isLaw ? T.accent : T.amberInk))
+                        soft: selected ? T.accent : (saved ? T.amberSoft : (isLaw ? T.accentSoft : T.amberSoft)),
+                        ink: selected ? Color.white : (saved ? T.amberInk : (isLaw ? T.accent : T.amberInk)))
             VStack(alignment: .leading, spacing: 4) {
                 if showLaw, let law {
                     Text(verbatim: law.name).font(F.ui(12, .semibold)).foregroundStyle(sec.ink)
@@ -263,9 +265,11 @@ struct ArticleRow: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card(radius: 22)
+        .card(selected ? T.accentSoft : .white, radius: 22)
         .overlay {
-            if saved {
+            if selected {
+                RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(T.accent, lineWidth: 2)
+            } else if saved {
                 RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color(hex: 0xFCD34D), lineWidth: 2)
             }
         }

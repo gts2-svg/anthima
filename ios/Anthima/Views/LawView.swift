@@ -3,6 +3,11 @@ import SwiftUI
 /// One law, regulation or rules document: its articles, its parts, and what you saved from it.
 struct LawView: View {
     let lawID: String
+    /// iPad: choosing an article shows it beside the list instead of opening a new screen.
+    var onSelect: ((Article) -> Void)? = nil
+    /// iPad: the article showing beside the list, marked in it.
+    var selectedKey: String? = nil
+    var showsAskButton = true
     @ObservedObject private var nav = AppNav.shared
     @ObservedObject private var store = UserStore.shared
     @ObservedObject private var lib = Library.shared
@@ -35,6 +40,8 @@ struct LawView: View {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { proxy.scrollTo(id, anchor: .top) }
                     jumpTo = nil
                 }
+                .onAppear { revealSelected(proxy, animated: false) }
+                .onChange(of: selectedKey) { _, _ in revealSelected(proxy, animated: true) }
             }
             .background(
                 LinearGradient(colors: [sec.soft, T.bg], startPoint: .top, endPoint: .init(x: 0.5, y: 0.3)).ignoresSafeArea()
@@ -50,19 +57,22 @@ struct LawView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Button { nav.askScope = law.id; nav.askDraft = ""; nav.tab = 2 } label: {
-                    Label { Text(verbatim: "اسأل عن \(law.name)").lineLimit(1) } icon: { Image(systemName: "sparkles") }
-                        .font(F.ui(15, .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 22)
-                        .frame(maxWidth: .infinity, minHeight: 56)
-                        .background {
-                            Capsule().fill(T.accent).shadow(color: T.accent.opacity(0.35), radius: 14, x: 0, y: 8)
-                        }
+                if showsAskButton {
+                    Button { nav.askScope = law.id; nav.askDraft = ""; nav.tab = 2 } label: {
+                        Label { Text(verbatim: "اسأل عن \(law.name)").lineLimit(1) } icon: { Image(systemName: "sparkles") }
+                            .font(F.ui(15, .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 22)
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                            .background {
+                                Capsule().fill(T.accent).shadow(color: T.accent.opacity(0.35), radius: 14, x: 0, y: 8)
+                            }
+                    }
+                    .buttonStyle(.press)
+                    .frame(maxWidth: 620)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
                 }
-                .buttonStyle(.press)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
             }
             .keyboardDone()
         } else {
@@ -266,9 +276,24 @@ struct LawView: View {
     }
 
     private func row(_ a: Article, preview: String? = nil) -> some View {
-        Button { nav.open(.article(a.key)) } label: { ArticleRow(article: a, preview: preview) }
+        Button {
+            if let onSelect { onSelect(a) } else { nav.open(.article(a.key)) }
+        } label: { ArticleRow(article: a, preview: preview, selected: selectedKey != nil && a.key == selectedKey) }
             .buttonStyle(.press)
             .softScroll()
+    }
+
+    /// iPad: bring the marked article into view in the list (when opening, and as pages turn).
+    private func revealSelected(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard onSelect != nil, query.isEmpty, tab == 0, let k = selectedKey,
+              let a = Library.shared.article(key: k) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (animated ? 0.05 : 0.25)) {
+            if animated {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { proxy.scrollTo(a.id, anchor: .center) }
+            } else {
+                proxy.scrollTo(a.id, anchor: .center)
+            }
+        }
     }
 
     private func partsList(_ law: Law, proxy: ScrollViewProxy) -> some View {

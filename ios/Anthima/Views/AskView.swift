@@ -338,6 +338,9 @@ struct AskView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: focused)
+        // iPad: the field keeps the reading width of the answers above it.
+        .frame(maxWidth: 860)
+        .frame(maxWidth: .infinity)
         .background(Color.white.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Rectangle().fill(T.line).frame(height: 1) }
     }
