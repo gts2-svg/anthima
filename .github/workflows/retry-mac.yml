@@ -28,8 +28,9 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -eu
-          head=$(gh api "repos/$REPO/commits/main" -q .sha)
-          echo "main is $head"
+          # The newest commit that changed the app; workflow-only commits need no rebuild.
+          head=$(gh api "repos/$REPO/commits?sha=main&path=ios&per_page=1" -q '.[0].sha')
+          echo "last app change is $head"
           for wf in testflight ios; do
             last=$(gh api "repos/$REPO/actions/workflows/$wf.yml/runs?branch=main&per_page=1" \
                      -q '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion) \(.head_sha)"')
@@ -38,6 +39,9 @@ jobs:
             if [ "$status" != "completed" ]; then
               echo "$wf is still waiting or running; nothing to do now."; exit 0
             fi
+            # Does that run's commit already contain the last app change?
+            cmp=$(gh api "repos/$REPO/compare/$head...$sha" -q .status)
+            if [ "$cmp" = "ahead" ] || [ "$cmp" = "identical" ]; then sha=$head; fi
             if [ "$sha" = "$head" ] && [ "$conclusion" = "success" ]; then
               echo "$wf already succeeded for this commit."; continue
             fi
