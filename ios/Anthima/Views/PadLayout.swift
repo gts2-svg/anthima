@@ -179,6 +179,7 @@ struct PadSideNav: View {
         .frame(width: full ? 250 : 76, alignment: .leading)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.white.opacity(0.75).ignoresSafeArea())
+        .animation(.spring(response: 0.4, dampingFraction: 0.88), value: full)
     }
 
     private func item(_ title: String, icon: String, on: Bool, muted: Bool = false, action: @escaping () -> Void) -> some View {
@@ -275,7 +276,7 @@ struct PadReader: View {
                     reading(current)
                 }
             } else if listShown || current == nil {
-                list(marked: marked, askButton: true)
+                list(marked: marked, askButton: true).padReadable(760)
             } else {
                 reading(current)
             }
