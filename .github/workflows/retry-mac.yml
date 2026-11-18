@@ -41,15 +41,13 @@ jobs:
             if [ "$sha" = "$head" ] && [ "$conclusion" = "success" ]; then
               echo "$wf already succeeded for this commit."; continue
             fi
-            if [ "$sha" = "$head" ] && [ "$conclusion" = "failure" ]; then
-              echo "$wf really failed for this commit; not retrying."; exit 0
-            fi
-            if [ "$sha" = "$head" ] && [ "$conclusion" = "cancelled" ]; then
-              # Retry only if no macOS job of that run ever got a machine.
+            if [ "$sha" = "$head" ]; then
+              # Same commit and not a success: retry only if no macOS job of that run
+              # ever got a machine (GitHub marks those runs failed or cancelled).
               started=$(gh api "repos/$REPO/actions/runs/$id/jobs" \
                           -q '[.jobs[] | select(.labels[0] | startswith("macos")) | select(.runner_name != null and .runner_name != "")] | length')
               if [ "$started" != "0" ]; then
-                echo "$wf was cancelled after it had started; not retrying."; exit 0
+                echo "$wf ran on a machine and ended $conclusion; not retrying."; exit 0
               fi
             fi
             echo "Sending $wf again."
