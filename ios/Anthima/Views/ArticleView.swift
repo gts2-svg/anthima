@@ -154,6 +154,10 @@ struct ArticlePage: View {
                     Text(verbatim: n).font(F.ui(13)).foregroundStyle(T.muted).textSelection(.enabled)
                 }
 
+                if let ex = Explanations.shared.explanation(lawID: law.id, n: a.n) {
+                    ExplainSection(explanation: ex)
+                }
+
                 regulationLinks(a)
                 parentLink(a)
                 counterpartLinks(a)

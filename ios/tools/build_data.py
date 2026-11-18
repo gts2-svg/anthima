@@ -209,6 +209,32 @@ def write_comparisons():
     print("comparisons:", len(out))
 
 
+EXPLAIN = sorted(glob.glob(os.path.join(ROOT, "ios", "data", "explain", "*.json")))
+EXPLAIN_OUT = os.path.join(ROOT, "ios", "Anthima", "Resources", "explain.json")
+
+
+def write_explanations(out):
+    """The short explanation («الشرح») and example («المثال») shown under an article, one file per
+    law in ios/data/explain/<law id>.json, keyed by the article number. Kept out of laws.json so
+    the laws file and its search index stay as they are."""
+    laws = {l["id"]: {a["n"] for a in l["articles"]} for l in out}
+    table = {}
+    for f in EXPLAIN:
+        lid = os.path.splitext(os.path.basename(f))[0]
+        if lid not in laws:
+            print("خطأ: ملف شرح لنظام غير موجود:", lid)
+            sys.exit(1)
+        entries = json.load(open(f))
+        missing = [n for n in entries if n not in laws[lid]]
+        if missing:
+            print(f"خطأ: شرح {lid} لمواد غير موجودة: {missing[:6]}")
+            sys.exit(1)
+        table[lid] = entries
+    os.makedirs(os.path.dirname(EXPLAIN_OUT), exist_ok=True)
+    json.dump(table, open(EXPLAIN_OUT, "w"), ensure_ascii=False, separators=(",", ":"))
+    print("explanations:", {k: len(v) for k, v in table.items()})
+
+
 def main():
     site = json.load(open(SITE))["laws"]
     site.sort(key=lambda l: float(l.get("order", 999)))
@@ -285,6 +311,7 @@ def main():
         sys.exit(1)
 
     write_comparisons()
+    write_explanations(out)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     version = json.load(open(SITE)).get("version", "")
