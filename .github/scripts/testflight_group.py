@@ -65,14 +65,20 @@ def main():
         if email in inside:
             print(f"  {email}: موجود في المجموعة")
             continue
-        found = call("GET", "/betaTesters" + q(**{"filter[email]": email}))["data"]
-        if found:
-            tid = found[0]["id"]
-            call("POST", f"/betaGroups/{gid}/relationships/betaTesters", {"data": [{"type": "betaTesters", "id": tid}]})
+        # الإضافة بإنشاء المختبِر داخل المجموعة؛ وإن رفضتها أبل فبربط المختبِر الموجود بها
+        made = call("POST", "/betaTesters", {"data": {"type": "betaTesters",
+            "attributes": {"email": email, "firstName": "JUBRAN", "lastName": "ALTALIDI"},
+            "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": gid}]}}}}, ok_fail=True)
+        if made:
+            tid = made["data"]["id"]
         else:
-            tid = call("POST", "/betaTesters", {"data": {"type": "betaTesters",
-                "attributes": {"email": email, "firstName": "JUBRAN", "lastName": "ALTALIDI"},
-                "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": gid}]}}}})["data"]["id"]
+            found = call("GET", "/betaTesters" + q(**{"filter[email]": email}))["data"]
+            if not found:
+                print(f"::warning::{email}: لم أستطع إضافته"); continue
+            tid = found[0]["id"]
+            if call("POST", f"/betaGroups/{gid}/relationships/betaTesters",
+                    {"data": [{"type": "betaTesters", "id": tid}]}, ok_fail=True) is None:
+                print(f"::warning::{email}: أبل رفضت إضافته للمجموعة"); continue
         call("POST", "/betaTesterInvitations", {"data": {"type": "betaTesterInvitations", "relationships": {
             "app": {"data": {"type": "apps", "id": app}}, "betaTester": {"data": {"type": "betaTesters", "id": tid}}}}},
             ok_fail=True)
