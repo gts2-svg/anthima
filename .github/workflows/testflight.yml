@@ -123,3 +123,10 @@ jobs:
       - name: Clean up key
         if: always()
         run: rm -rf "$RUNNER_TEMP/keys"
+
+  testers:
+    needs: upload
+    uses: ./.github/workflows/testflight-group.yml
+    with:
+      bundle_id: "com.gts2svg.anthima.9QR9KTSAZ9"
+    secrets: inherit

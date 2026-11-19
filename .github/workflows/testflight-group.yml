@@ -1,0 +1,38 @@
+name: testflight-group
+
+# يجهّز مجموعة الاختبار ME والمختبِرين لتطبيق في TestFlight، بلا فتح App Store Connect.
+# يُستدعى تلقائياً بعد كل رفع، ويمكن تشغيله يدوياً.
+on:
+  workflow_call:
+    inputs:
+      bundle_id: { type: string, required: true }
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "التطبيق"
+        type: choice
+        options: [anthima, tahaddi, wazn]
+
+env:
+  # المختبِرون: حساب المطوّر (الآيباد) وحساب الآيفون. احذف أو أضف بريداً هنا متى شئت.
+  TESTERS: "jubran0760@gmail.com g.t.s2022@hotmail.com"
+
+jobs:
+  group:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gts2-svg/anthima
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Group and testers
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          BUNDLE_ID: ${{ inputs.bundle_id || (inputs.app == 'wazn' && 'com.gts2svg.wazn') || (inputs.app == 'tahaddi' && 'com.gts2svg.tahaddi') || 'com.gts2svg.anthima.9QR9KTSAZ9' }}
+        run: |
+          pip install -q "pyjwt[crypto]"
+          python3 .github/scripts/testflight_group.py

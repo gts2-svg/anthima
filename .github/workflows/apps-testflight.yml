@@ -109,3 +109,10 @@ jobs:
       - name: Clean up key
         if: always()
         run: rm -rf "$RUNNER_TEMP/keys"
+
+  testers:
+    needs: upload
+    uses: ./.github/workflows/testflight-group.yml
+    with:
+      bundle_id: "${{ inputs.app == 'wazn' && 'com.gts2svg.wazn' || 'com.gts2svg.tahaddi' }}"
+    secrets: inherit
