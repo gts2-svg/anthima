@@ -88,9 +88,8 @@ def main():
     builds = call("GET", "/builds" + q(**{"filter[app]": app, "sort": "-uploadedDate", "limit": 3}))["data"]
     ready = [b for b in builds if b["attributes"].get("processingState") == "VALID" and not b["attributes"].get("expired")]
     if ready:
-        call("POST", f"/betaGroups/{gid}/relationships/builds", {"data": [{"type": "builds", "id": b["id"]} for b in ready]},
-             ok_fail=True)
-        print("النسخ الجاهزة في المجموعة: " + ", ".join(b["attributes"]["version"] for b in ready))
+        # المجموعة الداخلية تصلها النسخ تلقائياً، وأبل لا تقبل إضافتها إليها يدوياً
+        print("النسخ الجاهزة للاختبار: " + ", ".join(b["attributes"]["version"] for b in ready))
     else:
         print("لا نسخة جاهزة بعد؛ ستصل المجموعة تلقائياً حين تنتهي معالجتها")
 
