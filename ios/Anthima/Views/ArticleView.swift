@@ -4,6 +4,8 @@ import SwiftUI
 /// the text sits in a soft white card, the regulation link in amber, actions as three tiles.
 struct ArticleView: View {
     let startKey: String
+    /// iPad: tells the list beside it which article is on screen as pages turn.
+    var onPageChange: ((Article) -> Void)? = nil
     @ObservedObject private var store = UserStore.shared
     @ObservedObject private var nav = AppNav.shared
     @State private var current: String?
@@ -11,8 +13,9 @@ struct ArticleView: View {
 
     private var lib: Library { Library.shared }
 
-    init(startKey: String) {
+    init(startKey: String, onPageChange: ((Article) -> Void)? = nil) {
         self.startKey = startKey
+        self.onPageChange = onPageChange
         _current = State(initialValue: Library.shared.article(key: startKey)?.id)
     }
 
@@ -38,8 +41,9 @@ struct ArticleView: View {
                 if current == nil { current = first.id }
                 store.lastRead = currentArticle.key
             }
-            .onChange(of: current) { _, _ in
+            .onChange(of: current) { _, id in
                 store.lastRead = currentArticle.key
+                if let onPageChange, let a = law.articles.first(where: { $0.id == id }) { onPageChange(a) }
             }
             .sensoryFeedback(.selection, trigger: current)
             .navigationTitle(Text(verbatim: currentArticle.label.isEmpty
@@ -81,6 +85,7 @@ struct ArticleView: View {
                         .disabled(position >= law.articles.count - 1)
                         .accessibilityLabel("المادة التالية")
                 }
+                .frame(maxWidth: 620)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             }
@@ -187,6 +192,9 @@ struct ArticlePage: View {
             .padding(.horizontal, 20)
             .padding(.top, 6)
             .padding(.bottom, 24)
+            // iPad: a comfortable line length on a wide screen (no effect on the iPhone).
+            .frame(maxWidth: 780)
+            .frame(maxWidth: .infinity)
         }
     }
 

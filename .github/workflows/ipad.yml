@@ -1,0 +1,162 @@
+name: ipad
+
+# The iPad layout, while it is being built on the "ipad" branch: builds the app for the simulator and
+# photographs the iPad screens (portrait and landscape) plus a few iPhone screens, to check the iPhone
+# is unchanged. Pushes the pictures to the "ipad-screens" branch. Publishes nothing for installing.
+on:
+  push:
+    branches: [ipad]
+    paths: ["ios/**", ".github/workflows/ipad.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ipad
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-15-intel
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | grep -v beta | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+
+      - name: Build the laws file
+        run: python3 ios/tools/build_data.py
+
+      - name: Build the search index
+        run: |
+          xcrun swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos14" \
+            ios/Anthima/Model/ArabicText.swift ios/Anthima/Model/Library.swift \
+            ios/Anthima/Model/SearchIndex.swift ios/tools/IndexTool/main.swift \
+            -o "$RUNNER_TEMP/buildindex"
+          "$RUNNER_TEMP/buildindex" ios/Anthima/Resources/laws.json ios/Anthima/Resources/searchindex.dat
+
+      - name: Generate project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for simulator
+        working-directory: ios
+        run: |
+          set +e
+          xcodebuild -project Anthima.xcodeproj -scheme Anthima -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO SWIFT_OPTIMIZATION_LEVEL=-O build > build.log 2>&1
+          STATUS=$?
+          tail -n 20 build.log
+          grep -E "^/.*:[0-9]+:[0-9]+: error:" build.log | sort -u | head -45 > errors.txt
+          echo "---- errors ($(wc -l < errors.txt)) ----"; cat errors.txt
+          echo "---- warnings in the changed files ----"
+          grep -E "^/.*:[0-9]+:[0-9]+: warning:" build.log | sed "s|$GITHUB_WORKSPACE/||" \
+            | grep -E "PadLayout|LawView|ArticleView|LibraryView|Theme|AnthimaApp|Demo|AskView" | sort -u | head -40
+          while IFS= read -r line; do
+            f=$(echo "$line" | cut -d: -f1); l=$(echo "$line" | cut -d: -f2); m=$(echo "$line" | cut -d: -f5-)
+            echo "::error file=${f#$GITHUB_WORKSPACE/},line=$l::$m"
+          done < errors.txt
+          exit $STATUS
+
+      - name: Screenshots
+        working-directory: ios
+        run: |
+          APP=$(find build/Build/Products -name "Anthima.app" -maxdepth 3 | head -1)
+          BID=com.gts2svg.anthima.9QR9KTSAZ9
+          mkdir -p "$RUNNER_TEMP/shots"
+          : > "$RUNNER_TEMP/problems.txt"
+          pick() {
+            xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          want=sys.argv[1]
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v]
+          if want=='ipad':
+              order=['iPad (A16)','iPad (10th generation)','iPad Air 11-inch (M3)','iPad Air 11-inch (M2)']
+              for n in order:
+                  m=[x for x in c if x['name']==n]
+                  if m: print(m[-1]['udid']+' '+n); break
+              else:
+                  m=[x for x in c if x['name'].startswith('iPad')]; print(m[-1]['udid']+' '+m[-1]['name'])
+          else:
+              m=[x for x in c if x['name'].startswith('iPhone') and 'Pro' in x['name'] and 'Max' not in x['name']]
+              print(m[-1]['udid']+' '+m[-1]['name'])
+          " "$1"
+          }
+          wait_ready() {
+            STATE=stuck
+            for i in $(seq 1 "$2"); do
+              if [ -f "$DATA/Documents/demo-ready.txt" ]; then STATE=ready; return; fi
+              if ! ps -p "$1" > /dev/null 2>&1; then STATE=crashed; return; fi
+              sleep 1
+            done
+          }
+          # shoot <udid> <prefix> <screen> [extra args]
+          shoot() {
+            U=$1; P=$2; S=$3; shift 3
+            xcrun simctl terminate "$U" $BID 2>/dev/null || true
+            DATA=$(xcrun simctl get_app_container "$U" $BID data)
+            rm -f "$DATA/Documents/demo-ready.txt"
+            PID=$(xcrun simctl launch "$U" $BID -screen "$S" "$@" | awk '{print $NF}')
+            wait_ready "$PID" 180
+            if [ "$STATE" = ready ]; then echo "✓ $P-$S $(cat "$DATA/Documents/demo-ready.txt")"; sleep 2; fi
+            xcrun simctl io "$U" screenshot "$RUNNER_TEMP/shots/$P-$S.png" > /dev/null
+            if [ "$STATE" = ready ] && ! ps -p "$PID" > /dev/null 2>&1; then STATE=crashed; fi
+            if [ "$STATE" != ready ]; then echo "::error::$P-$S: $STATE"; echo "$P-$S: $STATE" >> "$RUNNER_TEMP/problems.txt"; fi
+          }
+          boot() {
+            xcrun simctl boot "$1"
+            xcrun simctl bootstatus "$1" -b
+            xcrun simctl status_bar "$1" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3
+            xcrun simctl install "$1" "$APP"
+            DATA=$(xcrun simctl get_app_container "$1" $BID data)
+            rm -f "$DATA/Documents/demo-ready.txt"
+            PID=$(xcrun simctl launch "$1" $BID -screen home | awk '{print $NF}')
+            wait_ready "$PID" 240
+            echo "warm-up: $STATE"
+          }
+
+          read PAD PADNAME <<< "$(pick ipad)"
+          echo "iPad: $PADNAME"
+          boot "$PAD"
+          for s in home explain law category search ask saved settings; do shoot "$PAD" pad-portrait "$s"; done
+          for s in home explain law article search ask saved; do shoot "$PAD" pad-landscape "$s" -landscape; done
+          xcrun simctl shutdown "$PAD" || true
+
+          read PHONE PHONENAME <<< "$(pick iphone)"
+          echo "iPhone: $PHONENAME"
+          boot "$PHONE"
+          for s in home explain law; do shoot "$PHONE" phone "$s"; done
+          ls -la "$RUNNER_TEMP/shots"
+          for f in $(find ~/Library/Logs/DiagnosticReports -name "Anthima*" 2>/dev/null); do
+            echo "==== $f"; head -c 6000 "$f" | grep -E "Exception|Termination|Crashed|Anthima|Fatal|reason|\"symbol\"" | head -60
+          done
+
+      - name: Publish screenshots to the ipad-screens branch
+        if: always()
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          ls "$RUNNER_TEMP"/shots/*.png > /dev/null 2>&1 || exit 0
+          mkdir -p "$RUNNER_TEMP/screens" && cd "$RUNNER_TEMP/screens"
+          git init -q -b ipad-screens
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          cp "$RUNNER_TEMP"/shots/*.png .
+          git add *.png
+          git commit -q -m "ipad screenshots for ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ipad-screens
+
+      - name: Check every screen opened
+        run: |
+          if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+            echo "These screens failed:"; cat "$RUNNER_TEMP/problems.txt"; exit 1
+          fi
+          echo "All screens opened."

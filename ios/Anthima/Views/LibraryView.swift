@@ -8,19 +8,33 @@ struct LibraryView: View {
     @ObservedObject private var store = UserStore.shared
     @State private var query = ""
     @State private var appeared = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// iPad: larger type, wider grid, the two cards side by side.
+    private var pad: Bool { sizeClass == .regular }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: pad ? 24 : 20) {
                 header
                 searchPill
-                askCard
-                continueCard
+                if pad {
+                    HStack(alignment: .top, spacing: 16) {
+                        askCard
+                        continueCard
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    askCard
+                    continueCard
+                }
                 sections
                 allLaws
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.horizontal, pad ? 40 : 20)
+            .padding(.top, pad ? 20 : 8)
+            .frame(maxWidth: pad ? 1100 : .infinity)
+            .frame(maxWidth: .infinity)
             .padding(.bottom, 40)
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 14)
@@ -41,9 +55,9 @@ struct LibraryView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: greeting).font(F.ui(14)).foregroundStyle(T.muted)
-                Text("مكتبة الأنظمة الخاصة").font(F.title(26)).foregroundStyle(T.ink)
-                Text("جبران طالع التليدي").font(F.ruqaa(19)).foregroundStyle(T.gold)
+                Text(verbatim: greeting).font(F.ui(pad ? 16 : 14)).foregroundStyle(T.muted)
+                Text("مكتبة الأنظمة الخاصة").font(F.title(pad ? 38 : 26)).foregroundStyle(T.ink)
+                Text("جبران طالع التليدي").font(F.ruqaa(pad ? 26 : 19)).foregroundStyle(T.gold)
             }
             Spacer()
             Button { nav.open(.settings) } label: { RoundIcon(system: "gearshape", size: 46) }
@@ -57,13 +71,13 @@ struct LibraryView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.accent)
             TextField("", text: $query, prompt: Text("اكتب الكلمة أو المعنى أو رقم المادة").foregroundStyle(T.muted))
-                .font(F.ui(16))
+                .font(F.ui(pad ? 18 : 16))
                 .foregroundStyle(T.ink)
                 .submitLabel(.search)
                 .onSubmit(goSearch)
         }
         .padding(.horizontal, 20)
-        .frame(height: 58)
+        .frame(height: pad ? 62 : 58)
         .background {
             Capsule().fill(Color.white).shadow(color: T.accent.opacity(0.12), radius: 14, x: 0, y: 6)
         }
@@ -94,6 +108,7 @@ struct LibraryView: View {
             }
             .foregroundStyle(.white)
             .padding(16)
+            .frame(maxHeight: pad ? .infinity : nil)
             .background {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .fill(LinearGradient(colors: [Color(hex: 0x6366F1), T.accent], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -117,6 +132,7 @@ struct LibraryView: View {
                     Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold)).foregroundStyle(T.muted)
                 }
                 .padding(14)
+                .frame(maxHeight: pad ? .infinity : nil)
                 .card(radius: 22)
             }
             .buttonStyle(.press)
@@ -130,7 +146,7 @@ struct LibraryView: View {
                 Spacer()
                 Text(verbatim: "\(lib.laws.count) نظاماً ولائحة · \(lib.articleCount) مادة").font(F.ui(12)).foregroundStyle(T.muted)
             }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: pad ? 16 : 12), count: pad ? 4 : 2), spacing: pad ? 16 : 12) {
                 ForEach(lib.categories) { c in
                     let n = lib.laws.filter { $0.cat == c.id }.count
                     if n > 0 {
@@ -146,12 +162,22 @@ struct LibraryView: View {
     private var allLaws: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("كل الأنظمة واللوائح").font(F.title(19, heavy: false)).foregroundStyle(T.ink).padding(.top, 6)
-            LazyVStack(spacing: 10) {
-                ForEach(lib.laws) { law in
-                    Button { nav.open(.law(law.id)) } label: { LawRow(law: law) }
-                        .buttonStyle(.press)
-                        .zoomSource("law-\(law.id)")
-                        .softScroll()
+            if pad {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(lib.laws) { law in
+                        Button { nav.open(.law(law.id)) } label: { LawRow(law: law, fill: true) }
+                            .buttonStyle(.press)
+                            .softScroll()
+                    }
+                }
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(lib.laws) { law in
+                        Button { nav.open(.law(law.id)) } label: { LawRow(law: law) }
+                            .buttonStyle(.press)
+                            .zoomSource("law-\(law.id)")
+                            .softScroll()
+                    }
                 }
             }
         }
@@ -179,6 +205,8 @@ struct SectionTile: View {
 
 struct LawRow: View {
     let law: Law
+    /// iPad grid: stretch to the height of the tallest row beside it.
+    var fill = false
 
     var body: some View {
         let s = T.section(law.cat)
@@ -197,6 +225,7 @@ struct LawRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        .frame(maxHeight: fill ? .infinity : nil)
         .card(radius: 22)
     }
 }
