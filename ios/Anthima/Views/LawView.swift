@@ -15,6 +15,7 @@ struct LawView: View {
     @State private var query = ""
     @State private var searching = false
     @State private var jumpTo: String?
+    @FocusState private var searchFocused: Bool
 
     private var law: Law? { Library.shared.law(lawID) }
 
@@ -24,8 +25,7 @@ struct LawView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        head(law)
-                        if searching { searchField.transition(.move(edge: .top).combined(with: .opacity)) }
+                        head(law).id("law-top")
                         partChips(law)
                         switch tab {
                         case 2: savedList(law)
@@ -39,6 +39,30 @@ struct LawView: View {
                     guard let id else { return }
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { proxy.scrollTo(id, anchor: .top) }
                     jumpTo = nil
+                }
+                // The search field sits above the list (not inside it), so it shows even when the
+                // list is scrolled far down to the article open beside it (iPad). Results start
+                // at the top of the list, so jump there when a search begins.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if searching {
+                        searchField
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .onChange(of: searching) { _, on in
+                    if on {
+                        proxy.scrollTo("law-top", anchor: .top)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { searchFocused = true }
+                    } else {
+                        searchFocused = false
+                        query = ""
+                        revealSelected(proxy, animated: true)
+                    }
+                }
+                .onChange(of: query) { old, new in
+                    if old.isEmpty != new.isEmpty { proxy.scrollTo("law-top", anchor: .top) }
                 }
                 .onAppear { revealSelected(proxy, animated: false) }
                 .onChange(of: selectedKey) { _, _ in revealSelected(proxy, animated: true) }
@@ -155,6 +179,8 @@ struct LawView: View {
             Image(systemName: "magnifyingglass").foregroundStyle(T.accent)
             TextField("", text: $query, prompt: Text("ابحث في هذا النظام أو اكتب رقم المادة").foregroundStyle(T.muted))
                 .font(F.ui(15))
+                .focused($searchFocused)
+                .submitLabel(.search)
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(T.muted) }
                     .accessibilityLabel("مسح")
