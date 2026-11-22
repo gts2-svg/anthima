@@ -1,0 +1,37 @@
+name: apps-testflight-request
+
+# طلب رفع «وزن» أو «تحدّي» إلى TestFlight بدفعة git، بلا ضغط زر في صفحة Actions:
+# تعديل الملف .github/testflight-requests/<التطبيق> (wazn أو tahaddi) يشغّل apps-testflight لذلك التطبيق.
+on:
+  push:
+    branches: [main]
+    paths: [".github/testflight-requests/**"]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          changed=$(git diff --name-only HEAD~1 HEAD -- .github/testflight-requests/ || true)
+          echo "changed: $changed"
+          for f in $changed; do
+            app=$(basename "$f")
+            case "$app" in
+              wazn|tahaddi)
+                echo "dispatching apps-testflight for $app"
+                gh workflow run apps-testflight.yml --ref main -R "$REPO" -f app="$app" ;;
+              *) echo "ignoring $f" ;;
+            esac
+          done
