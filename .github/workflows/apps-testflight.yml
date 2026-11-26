@@ -27,6 +27,7 @@ jobs:
       REPO: ${{ inputs.app == 'wazn' && 'gts2-svg/Wazn' || (inputs.app == 'tasbeeb' && 'gts2-svg/anthima' || 'gts2-svg/tahaddi') }}
       NAME: ${{ inputs.app == 'wazn' && 'Wazn' || (inputs.app == 'tasbeeb' && 'Tasbeeb' || 'Tahaddi') }}
       IOS_DIR: ${{ inputs.app == 'tasbeeb' && 'app/tasbeeb/ios' || 'app/ios' }}
+      INTERNAL_ONLY: ${{ inputs.app == 'tasbeeb' && 'false' || 'true' }}
     steps:
       - name: Check the Apple secrets
         env:
@@ -95,7 +96,7 @@ jobs:
             <key>destination</key><string>upload</string>
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>automatic</string>
-            <key>testFlightInternalTestingOnly</key><true/>
+            <key>testFlightInternalTestingOnly</key><$INTERNAL_ONLY/>
           </dict>
           </plist>
           PLIST
