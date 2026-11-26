@@ -9,7 +9,7 @@ on:
       app:
         description: "التطبيق"
         type: choice
-        options: [tahaddi, wazn]
+        options: [tahaddi, wazn, tasbeeb]
         default: tahaddi
 
 permissions:
@@ -24,8 +24,9 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 60
     env:
-      REPO: ${{ inputs.app == 'wazn' && 'gts2-svg/Wazn' || 'gts2-svg/tahaddi' }}
-      NAME: ${{ inputs.app == 'wazn' && 'Wazn' || 'Tahaddi' }}
+      REPO: ${{ inputs.app == 'wazn' && 'gts2-svg/Wazn' || (inputs.app == 'tasbeeb' && 'gts2-svg/anthima' || 'gts2-svg/tahaddi') }}
+      NAME: ${{ inputs.app == 'wazn' && 'Wazn' || (inputs.app == 'tasbeeb' && 'Tasbeeb' || 'Tahaddi') }}
+      IOS_DIR: ${{ inputs.app == 'tasbeeb' && 'app/tasbeeb/ios' || 'app/ios' }}
     steps:
       - name: Check the Apple secrets
         env:
@@ -52,9 +53,9 @@ jobs:
 
       - name: Generate project
         run: |
-          app/ios/build_web.sh
+          "$IOS_DIR/build_web.sh"
           brew install xcodegen
-          cd app/ios && xcodegen generate
+          cd "$IOS_DIR" && xcodegen generate
 
       - name: Archive
         env:
@@ -62,7 +63,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        working-directory: app/ios
+        working-directory: ${{ env.IOS_DIR }}
         run: |
           mkdir -p "$RUNNER_TEMP/keys"
           KEY="$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
@@ -114,5 +115,5 @@ jobs:
     needs: upload
     uses: ./.github/workflows/testflight-group.yml
     with:
-      bundle_id: "${{ inputs.app == 'wazn' && 'com.gts2svg.wazn' || 'com.gts2svg.tahaddi' }}"
+      bundle_id: "${{ inputs.app == 'wazn' && 'com.gts2svg.wazn' || (inputs.app == 'tasbeeb' && 'com.gts2svg.tasbeeb' || 'com.gts2svg.tahaddi') }}"
     secrets: inherit
