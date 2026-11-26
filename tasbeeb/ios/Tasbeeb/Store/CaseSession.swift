@@ -61,6 +61,15 @@ final class CaseSession: ObservableObject {
             rec.state = engine.setField(rec.state, field, text)
             refresh()
             advance()
+        } else if text.count <= 60, !text.contains("\n"),
+                  let q = rec.messages.last(where: { $0.kind == .question && $0.answered == nil }),
+                  let key = q.key, !key.hasPrefix("__") || key.hasPrefix("__confirm:") {
+            let k = key.hasPrefix("__confirm:") ? String(key.dropFirst(10)) : key
+            // ردّ مكتوب على سؤال بأزرار (مثل «بيع» بدل الخيارات المعروضة): يُعدّ جواباً لا إضافةً للمحضر
+            answerMark(q.id, text)
+            rec.state = engine.setField(rec.state, k, text)
+            refresh()
+            advance()
         } else {
             post(Msg(role: .user, kind: .text, text: text))
             rec.minutes += "\n" + text

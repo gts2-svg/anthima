@@ -7,10 +7,14 @@ const B = v => (v && String(v).trim()) ? String(v).trim() : '(…)';
 const lam = lbl => 'ل' + lbl.replace(/^ال/, 'ل');            // المدعي ← للمدعي
 function firstMatch(text, re, grp){const m = text.match(re); return m ? (m[grp||0]||'').trim() : ''}
 function maxAmount(text){
-  let best = 0; const re = /([0-9][0-9,٬.]*)\s*(ريال|ريالاً|ريالا|ر\.س)/g; let m;
-  while((m = re.exec(text))){const n = parseFloat(m[1].replace(/[,٬]/g,'')); if(n>best) best=n}
+  let best = 0; let m;
+  const re1 = /([0-9][0-9,٬.]*)\s*(ريال|ريالاً|ريالا|ر\.س)/g;
+  const re2 = /(?:مبلغ|قدره|وقدره|بمبلغ|بثمن|ثمن|بمقدار|قيمة|قيمته|قيمتها)\s*(?:قدره|وقدره|مقداره)?\s*:?\s*\(?\s*([0-9][0-9,٬.]*)/g;
+  for(const re of [re1,re2]) while((m = re.exec(text))){const n = parseFloat(m[1].replace(/[,٬]/g,'')); if(n>best) best=n}
   return best;
 }
+// المبلغ المطلوب في الدعوى: من فقرة «أطلب…»، وإلا أكبر مبلغ
+function claimAmount(text){ const r = (typeof trafficRequests==='function') ? trafficRequests(text) : []; const sum = r.reduce((p,x)=>p+x.amount,0); return sum || maxAmount(text); }
 const fmtNum = n => n ? n.toLocaleString('en-US') : '';
 /* ---------- المبالغ: قراءة، تمييز، تفقيط ---------- */
 const toNum = v => { const n = parseFloat(String(v||'').replace(/[٬,]/g,'').replace(/٫/g,'.')); return isFinite(n)?n:0; };
@@ -80,7 +84,7 @@ T.lease = {cat:'huquqi', name:'فسخ عقد إيجار وإخلاء',
     {k:'deedNo',label:'رقم صك الملكية',kind:'text',detect:t=>firstMatch(t,/صك(\s+الملكية)?\s+(رقم|برقم)\s*\(?\s*([0-9]+)/,3)},
     {k:'withRent',label:'نطاق الطلب',kind:'choice',req:1,options:['إخلاء فقط','إخلاء مع مطالبة بالأجرة'],
       detect:t=>/الأجرة المتأخرة|الاجرة المتأخرة|المطالبة بالأجرة|إلزامه بدفع|الزامه بدفع|وإلزامه بسداد|مطالب(ة|اً|ا) ب(مبلغ|الأجرة)/.test(t)?'إخلاء مع مطالبة بالأجرة':''},
-    {k:'amount',label:'مبلغ الأجرة المطالب بها',kind:'text',when:c=>c.f.withRent==='إخلاء مع مطالبة بالأجرة',detect:t=>fmtNum(maxAmount(t))}
+    {k:'amount',label:'مبلغ الأجرة المطالب بها',kind:'text',when:c=>c.f.withRent==='إخلاء مع مطالبة بالأجرة',detect:t=>fmtNum(claimAmount(t))}
   ],
   ev:[
     {id:'deed',label:'صك الملكية',kw:/صك/,item:c=>`صك الملكية رقم (${B(c.f.deedNo)}) المثبت لصفت${c.pp}`},
@@ -157,7 +161,7 @@ T.ownCar = {cat:'huquqi', name:'إثبات ملكية سيارة ونقلها',
 
 T.loan = {cat:'huquqi', name:'مطالبة مالية (قرض أو سلفة)',
   kw:[[/قرض|أقرضت|اقرضت|أقرضه|سلفة|سلف/,4],[/مبلغ|ريال/,1],[/تحويل|حوالة/,1]],
-  fields:[{k:'amount',label:'المبلغ المطالب به',kind:'text',req:1,detect:t=>fmtNum(maxAmount(t))}],
+  fields:[{k:'amount',label:'المبلغ المطالب به',kind:'text',req:1,detect:t=>fmtNum(claimAmount(t))}],
   ev:[
     {id:'transfer',label:'التحويلات البنكية',kw:/تحويل|حوالة|كشف حساب/,item:c=>'التحويلات البنكية المثبتة لتسليم المبلغ'},
     {id:'bond',label:'السند أو الإقرار المكتوب',kw:/سند|إقرار مكتوب|اقرار مكتوب|ورقة/,item:c=>'السند المكتوب'},
@@ -172,11 +176,37 @@ T.loan = {cat:'huquqi', name:'مطالبة مالية (قرض أو سلفة)',
   alerts:c=>{const a=[]; if(c.ev.has('chats') && c.amt>100000) a.push({lvl:'warn',t:'المحادثات قرينة',b:'للمحكمة استنباط القرائن فيما يجوز إثباته بالشهادة فقط (المادة 85 من نظام الإثبات)، والمبلغ يتجاوز مئة ألف ريال.'}); return a}
 };
 
+T.price = {cat:'huquqi', name:'مطالبة بباقي ثمن مبيع', money:c=>toNum(c.f.amount),
+  kw:[[/بعت|باع|بعته|بعناه|بعنا|بائع|مبايعة|البيع على/,2],[/الثمن|بثمن|ثمن المبيع|أقساط|اقساط|قسط|تبقى|المتبقي|باقي الثمن|متبقي/,3],[/سداد|سدد|المشتري/,1]],
+  fields:[
+    {k:'item',label:'المبيع',kind:'text',req:1,detect:t=>{ let x=firstMatch(t,/(?:بعت|باع|بعنا|باعت|بعته)\s+(?:على|لل?)\s*(?:ال)?مدع[ىي]\s+علي(?:ه|ها)\s+([\s\S]{3,140}?)\s*(?:،\s*)?ب(?:ثمن|مبلغ|قيمة)/,1); return x.replace(/\s+/g,' ').replace(/[،\s]+$/,'').trim(); },ph:'مركبة من نوع (…)، سنة الصنع (…)'},
+    {k:'price',label:'الثمن الكلي',kind:'text',detect:t=>money2(toNum(firstMatch(t,/(?:بثمن|ثمن(?:ه|ها)?|إجمالي قيمة العقد|قيمة العقد)\s*(?:قدره|وقدره|مقداره)?\s*:?\s*\(?\s*([0-9][0-9,٬.]*)/,1)))},
+    {k:'paid',label:'المسدد منه',kind:'text',detect:t=>money2(toNum(firstMatch(t,/(?:تم\s+)?(?:سداد|سدد|دفع|قبض|استلام|استلمت|قبضت)\s+(?:مبلغ\s*)?(?:قدره|وقدره)?\s*:?\s*\(?\s*([0-9][0-9,٬.]*)/,1)))},
+    {k:'amount',label:'المتبقي المطالب به',kind:'text',req:1,detect:t=>{ const r=trafficRequests(t); if(r.length) return money2(r.reduce((p,x)=>p+x.amount,0)); return money2(toNum(firstMatch(t,/(?:تبقى|المتبقي|باقي)[^0-9\n]{0,25}\(?\s*([0-9][0-9,٬.]*)/,1))); }},
+    {k:'contractNo',label:'رقم العقد',kind:'text',detect:t=>firstMatch(t,/العقد\s+رقم\s*\(?\s*([0-9]+)/,1)},
+    {k:'contractDate',label:'تاريخ العقد',kind:'text',detect:t=>hdate(firstMatch(t,/(?:بتاريخ|وتاريخ)\s*([0-9]{1,4}\s*\/\s*[0-9]{1,2}\s*\/\s*[0-9]{1,4})\s*(?:هـ|ه)?\s*،?\s*(?:بعت|باع|بعنا|تم البيع|أبرم)/,1) || firstMatch(t,/(?:عقد|العقد)[^.\n]{0,40}?(?:وتاريخ|بتاريخ)\s*([0-9]{1,4}\s*\/\s*[0-9]{1,2}\s*\/\s*[0-9]{1,4})/,1))},
+    {k:'installments',label:'طريقة السداد',kind:'choice',options:['أقساط شهرية','مؤجل دفعة واحدة','حال'],detect:t=>/أقساط|اقساط|قسط/.test(t)?'أقساط شهرية':(/مؤجل|أجل/.test(t)?'مؤجل دفعة واحدة':'')},
+    {k:'oath',label:'اليمين في المحضر',kind:'choice',options:['اليمين المتممة','يمين الاستظهار','لا يوجد'],detect:t=>/حلف|اليمين|يمين/.test(t)?(/الاستظهار/.test(t)?'يمين الاستظهار':(/المتممة|المكملة/.test(t)?'اليمين المتممة':'')):'لا يوجد'}
+  ],
+  ev:[
+    {id:'contract',label:'عقد المبايعة',kw:/عقد|مبايعة/,item:c=>'عقد المبايعة',said:'عقد المبايعة'},
+    {id:'statement',label:'كشف السداد',kw:/كشف (ال)?(سداد|حساب)|سجل (ال)?سداد/,item:c=>'كشف السداد',said:'كشف السداد'}
+  ],
+  claim:c=>`إلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${c.pl} مبلغ (${B(c.f.amount)}) ريال`,
+  admit:c=>`بالشراء وبقاء المبلغ في ${c.g('ذمته','ذمتها')}`, wafaObj:'بالسداد', istizhar:'على بقاء المبلغ في ذمة المدعى عليه',
+  reason:c=>'', ruling:c=>'',
+  build:c=>priceBuild(c),
+  alerts:c=>{const a=[]; const pr=toNum(c.f.price), pd=toNum(c.f.paid), am=toNum(c.f.amount);
+    if(pr && pd && am && Math.abs(pr-pd-am)>0.5) a.push({lvl:'red',t:'الحساب لا يستقيم',b:`الثمن (${money2(pr)}) ناقص المسدد (${money2(pd)}) = ${money2(pr-pd)}، والمطالب به (${money2(am)}). تحقق.`});
+    if(c.f.installments==='أقساط شهرية' && !/الحال منه|حلت|حلول|منتهي|انتهت مدة/.test(c.text)) a.push({lvl:'warn',t:'حلول الأقساط',b:'تحقق من حلول جميع الأقساط المطالب بها وقت الحكم، أو من شرط حلول الباقي عند التأخر؛ فما لم يحل لا يُلزم به.'});
+    return a;}
+};
+
 T.contract = {cat:'huquqi', name:'مطالبة بقيمة عقد (مقاولة أو خدمات أو توريد)',
   kw:[[/مقاولة|مقاول|توريد|مستخلص|مستخلصات/,3],[/خدمات|أعمال|فاتورة|فواتير/,2],[/قيمة العقد|المتبقي من قيمة|باقي قيمة/,3]],
   fields:[
     {k:'kind',label:'نوع العقد',kind:'choice',req:1,options:['مقاولة','خدمات','توريد'],detect:t=>/توريد/.test(t)?'توريد':(/مقاول/.test(t)?'مقاولة':(/خدمات/.test(t)?'خدمات':''))},
-    {k:'amount',label:'المبلغ المطالب به',kind:'text',req:1,detect:t=>fmtNum(maxAmount(t))}
+    {k:'amount',label:'المبلغ المطالب به',kind:'text',req:1,detect:t=>fmtNum(claimAmount(t))}
   ],
   ev:[
     {id:'contract',label:'العقد',kw:/عقد/,item:c=>`عقد ${B(c.f.kind)} المبرم بينهما`},
@@ -197,7 +227,7 @@ T.injury = {cat:'huquqi', name:'تعويض عن إصابة',
   kw:[[/إصابة|إصابات|اصابة|اصابات/,3],[/شجاج|مقدري الشجاج|أرش|ارش/,4],[/التقرير الطبي/,2],[/تعويض/,1]],
   fields:[
     {k:'cause',label:'سبب الإصابة',kind:'text',req:1,detect:t=>firstMatch(t,/(بسبب|نتيجة)\s+([^،.؛\n]{3,50})/,2)},
-    {k:'amount',label:'المبلغ',kind:'text',req:1,detect:t=>fmtNum(maxAmount(t))}
+    {k:'amount',label:'المبلغ',kind:'text',req:1,detect:t=>fmtNum(claimAmount(t))}
   ],
   ev:[
     {id:'act',label:'البينة على وقوع الفعل من المدعى عليه',kw:/محضر|شاهد|شهود|تقرير الحادث|كاميرا/,item:c=>`ما يثبت وقوع الفعل من ${c.D}`},
@@ -392,6 +422,62 @@ T.traffic = {cat:'murori', name:'تعويض عن حادث مروري', money:c=>
     return a;}
 };
 
+/* ---------- أجزاء الضبط المشتركة ---------- */
+const askedBayyina = t => /عن بينت(ه|ها)|بينته\s*؟|بينتها\s*؟|البينة على دعوا|مزيد بينة/.test(t);
+const closedInMinutes = t => /(إ|ا)قفال باب المرافعة/.test(t);
+function closeLine(c){ return closedInMinutes(c.text) ? '' : ' وعليه قررت الدائرة إقفال باب المرافعة والنطق بالحكم.'; }
+function defSentence(c, admit){
+  const D=c.D, g=c.g, f=c.f;
+  switch(c.pos){
+    case 'absN': return `وبما أن ${D} قد ${g('تبلغ','تبلغت')} بموعد هذه الجلسة${f.noticeNo?` بموجب مهمة التبليغ رقم ${mq(f.noticeNo)}`:''} ولم ${g('يحضر','تحضر')} ولم ${g('يتقدم','تتقدم')} بعذر تقبله الدائرة؛ مما ${g('تعده','تعدها')} الدائرة ${g('ناكلاً','ناكلة')} عن الحضور والجواب.`;
+    case 'absX': return `وبما أن ${D} لم ${g('يحضر','تحضر')} رغم ${g('تبليغه','تبليغها')} بموعد الجلستين، ولم ${g('يتبلغ','تتبلغ')} لشخص${c.h}.`;
+    case 'iqrar': return `وبما أن ${D} ${g('أقر','أقرت')} ${admit}، والإقرار حجة قاصرة على المقر.`;
+    case 'inkar': return `وبما أن ${D} ${g('أنكر','أنكرت')} الدعوى.`;
+    case 'nokol': return `وبما أن ${D} ${g('امتنع','امتنعت')} عن الجواب رغم ${g('إنذاره','إنذارها')}؛ مما ${g('تعده','تعدها')} الدائرة ${g('ناكلاً','ناكلة')} عن الجواب.`;
+    case 'agentDef': return `وبما أن وكيل ${D} حضر ودفع ${withBa(f.defense)}، وهذا الدفع غير مؤثر في الدعوى ${f.reply?f.reply:'لـ(…)'}.`;
+    case 'wafa': return `وبما أن ${D} ${g('أقر','أقرت')} بأصل الحق ${g('ودفع','ودفعت')} بالسداد، ولم ${g('يقدّم','تقدّم')} بينة على ما ${g('دفع','دفعت')} به.`;
+    default: return `وبما أن (موقف ${D}).`;
+  }
+}
+// صيغة القاضي الفرد («لدي أنا القاضي… قررت») بدل «الدائرة»
+function soloVoice(text){
+  if(!/لدي(ّ)?\s+أنا\s+القاضي|لدي(ّ)?\s+انا\s+القاضي/.test(S.text||'') || /الدائرة/.test(S.text||'')) return text;
+  return text.replace(/وبما أن الدائرة اطلعت على/g,'وبما أني اطلعت على').replace(/اطلعت الدائرة على/g,'اطلعت على')
+    .replace(/قررت الدائرة/g,'قررت').replace(/حكمت الدائرة/g,'حكمت').replace(/بعذر تقبله الدائرة/g,'بعذر مقبول')
+    .replace(/(تعده|تعدها) الدائرة/g,(m,x)=>x==='تعده'?'أعده':'أعدها').replace(/ثبت للدائرة/g,'ثبت لدي').replace(/فتبين لها/g,'فتبين لي')
+    .replace(/من اختصاص الدائرة/g,'من اختصاص المحكمة').replace(/وأفهمت الدائرة/g,'وأفهمت').replace(/الدائرة/g,'المحكمة');
+}
+
+/* مطالبة بباقي ثمن مبيع */
+function priceBuild(c){
+  const f=c.f, P=c.P, D=c.D, g=c.g, gp=c.gp, ev=c.ev, t=T.price;
+  const parts=[];
+  const said=t.ev.filter(e=>ev.has(e.id)).map(e=>e.said);
+  if(!askedBayyina(c.text) && said.length)
+    parts.push({title:'بينة المدعي', text:`وبسؤال ${P} عن ${gp('بينته','بينتها')}؟ ${gp('أجاب','أجابت')} ${gp('بقوله','بقولها')}: ${said.join('، ')}. هكذا ${gp('أجاب','أجابت')}.`});
+  const pay = f.installments==='أقساط شهرية'?' مقسطاً على أقساط شهرية':(f.installments==='مؤجل دفعة واحدة'?' مؤجلاً':'');
+  const rs=[];
+  if(ev.has('contract')) rs.push(`عقد المبايعة${f.contractNo?` رقم ${mq(f.contractNo)}`:''}${f.contractDate?` وتاريخ ${f.contractDate}`:''}، المتضمن بيع ${P} على ${D} ${f.item||'(…)'} بثمن قدره ${mq(f.price)} ${rial(f.price)}${pay}`);
+  if(ev.has('statement')) rs.push(`كشف السداد المتضمن سداد ${D} مبلغ ${mq(f.paid)} ${rial(f.paid)} من الثمن`);
+  let r2 = rs.map((x,i)=>(i===0?'وقد اطلعت الدائرة على ':'كما اطلعت الدائرة على ')+x).join('. ');
+  r2 = (r2? r2+'؛ هكذا تضمن.' : '') + closeLine(c);
+  if(r2.trim()) parts.push({title:'رصد البينات', text:r2.trim()});
+  const o=[];
+  o.push(`فبناءً على ما تقدم من الدعوى${c.attended?' والإجابة':''}، ولكون ${P} ${gp('يطلب','تطلب')} إلزام ${D} بأن ${g('يدفع','تدفع')} ${c.pl} مبلغ ${mq(f.amount)} ${rial(f.amount)} باقي ثمن ${f.item||'(…)'} المبيع ${g('عليه','عليها')}${f.contractNo?` بموجب العقد رقم ${mq(f.contractNo)}`:''}${f.contractDate?` وتاريخ ${f.contractDate}`:''}،`);
+  o.push(defSentence(c, `بالشراء وبقاء المبلغ في ${g('ذمته','ذمتها')}`));
+  const b=[];
+  if(ev.has('contract')) b.push(`ولكون ${P} ${gp('قدّم','قدّمت')} عقد المبايعة المتضمن ${gp('بيعه','بيعها')} على ${D} المبيع بثمن قدره ${mq(f.price)} ${rial(f.price)}${pay}`);
+  if(f.paid) b.push(`وقد ${gp('أقر','أقرت')} ${P} بقبض مبلغ ${mq(f.paid)} ${rial(f.paid)} منه`);
+  b.push('والأصل بقاء ما لم يثبت سداده من الثمن في ذمة المشتري');
+  if(f.oath==='اليمين المتممة') b.push(`وقد ${gp('حلف','حلفت')} ${P} اليمين المتممة على بقاء المبلغ المدعى به في ذمة ${D}`);
+  if(f.oath==='يمين الاستظهار') b.push(`وقد ${gp('حلف','حلفت')} ${P} يمين الاستظهار على بقاء المبلغ المدعى به في ذمة ${D}`);
+  o.push(b.join('، ')+'.');
+  o.push(`وعليه ومن أجل ذلك كله. حكمت الدائرة بإلزام ${D} بأن ${g('يدفع','تدفع')} ${lam(P)} مبلغاً وقدره ${f.amount?mq(f.amount)+' '+rial(f.amount)+' ('+tafqit(f.amount)+')':'(…) ريال'}، وبذلك حكمت والله أعلم وأحكم.`);
+  o.push(closing(c, toNum(f.amount), true));
+  parts.push({title:'التسبيب والحكم', text:o.join(' ').replace(/\s+/g,' ').trim()});
+  return parts;
+}
+
 /* الضبط المروري: إجابة البينة، ثم الرصد وإقفال المرافعة، ثم التسبيب والحكم — على قالب القاضي */
 function trafficBuild(c){
   const f=c.f, P=c.P, D=c.D, g=c.g, gp=c.gp, ev=c.ev, t=T.traffic;
@@ -399,7 +485,7 @@ function trafficBuild(c){
   const parts=[];
   // 1) إجابة المدعي عن بينته — إن لم ترد في المحضر
   const said = t.ev.filter(e=>ev.has(e.id)).map(e=>e.said);
-  if(!/عن بينت(ه|ها)|بينته\s*؟|بينتها\s*؟/.test(c.text) && said.length)
+  if(!askedBayyina(c.text) && said.length)
     parts.push({title:'بينة المدعي', text:`وبسؤال ${P} عن ${gp('بينته','بينتها')}؟ ${gp('أجاب','أجابت')} ${gp('بقوله','بقولها')}: ${said.join('، ')}. هكذا ${gp('أجاب','أجابت')}.`});
   // 2) الرصد
   const rs=[];
@@ -410,7 +496,7 @@ function trafficBuild(c){
     : `تقدير مركز تقدير المتضمن أن قيمة إصلاح المركبة ${mq(f.amount)} ${rial(f.amount)}`);
   if(ev.has('receipt')) rs.push(`إيصال سداد رسوم مركز تقدير بمبلغ ${mq(f.fees)} ${rial(f.fees)}`);
   let r2 = rs.map((x,i)=>(i===0?'وقد اطلعت الدائرة على ':'كما اطلعت الدائرة على ')+x).join('. ');
-  r2 = (r2? r2+'؛ هكذا تضمنت. ' : '') + 'وعليه قررت الدائرة إقفال باب المرافعة والنطق بالحكم.';
+  r2 = ((r2? r2+'؛ هكذا تضمنت.' : '') + closeLine(c)).trim();
   parts.push({title:'رصد البينات', text:r2});
   // 3) التسبيب والحكم
   const car = [f.car, f.plate?'لوحة رقم '+f.plate:''].filter(Boolean).join('، ');
@@ -518,6 +604,7 @@ function extractCommon(text){
     const yesN = /لشخصه|لشخصها|تبل(غ|ّغ)(ت)?\s+(ب|ل)|أبشر|ابشر|(ال)?رسال(ة|ه) (ال)?نصية|الرسائل النصية/.test(text);
     if(notN){f.pos='absX';st.pos='ok'}
     else if(yesN){f.pos='absN';st.pos=/أبشر|ابشر|نصية/.test(text)?'unc':'ok'}
+    else if(/رغم\s+(تبلغه|تبلغها|تبلّغه|تبلّغها|تبليغه|تبليغها)|مع\s+(تبلغه|تبلغها)/.test(text)){f.pos='absN';st.pos=/السير في (ال)?دعوى حضوري|حضورياً|حضوريا/.test(text)?'ok':'unc'}
     else {f.pos='';st.pos='mis'}
   } else if(ans){
     const wafa = /(^|[\s،.])(سددت|سددتها|سددته|وفيت|أوفيت|اوفيت|دفعت|قمت بالسداد|تم السداد|سلمته)/.test(ans);
@@ -897,7 +984,7 @@ const TB = {
     const c = ctx();
     const chips = t ? t.ev.concat(EV_COMMON.filter(e => !e.when || e.when(c))).map(e => ({id:e.id, label:e.label, on:S.ev.has(e.id)})) : [];
     const alerts = buildAlerts().map(a => ({lvl:a.lvl, title:a.t, body:a.b || '', checks:a.checks || []}));
-    let text = '', parts = []; try { const g = generate(); if(Array.isArray(g)){ parts = g; text = g.map(x=>x.text).join('\n\n'); } else text = g; } catch(e) { text = 'تعذّرت الصياغة: ' + e.message; }
+    let text = '', parts = []; try { const g = generate(); if(Array.isArray(g)){ parts = g.map(x=>({title:x.title, text:soloVoice(x.text)})); text = parts.map(x=>x.text).join('\n\n'); } else text = soloVoice(g); } catch(e) { text = 'تعذّرت الصياغة: ' + e.message; }
     return JSON.stringify({cat:S.cat, catName:CATS[S.cat] || '', type:S.type, typeName:t ? t.name : '', conf:S.conf,
       generic:!!(t && t.generic), fields, chips, alerts, text, parts,
       docs:S.atts.map(a => ({type:a.doc ? a.doc.type : 'other', label:a.doc ? a.doc.label : 'مستند', items:a.doc ? Object.values(a.doc.items) : [], weak:!!(a.ocr && a.conf < 70), name:a.name}))});
