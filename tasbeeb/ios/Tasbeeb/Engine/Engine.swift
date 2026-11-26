@@ -59,11 +59,17 @@ struct EngineView: Decodable {
     let chips: [EngineChip]
     let alerts: [EngineAlert]
     let text: String
+    let parts: [EnginePart]?
     let docs: [EngineDoc]
 
     static let empty = EngineView(cat: "", catName: "", type: "", typeName: "", conf: "", generic: false,
-                                  fields: [], chips: [], alerts: [], text: "", docs: [])
+                                  fields: [], chips: [], alerts: [], text: "", parts: nil, docs: [])
     var conflicts: [EngineAlert] { alerts.filter { $0.lvl == "red" } }
+}
+
+struct EnginePart: Decodable, Hashable {
+    let title: String
+    let text: String
 }
 
 struct Catalog: Decodable {

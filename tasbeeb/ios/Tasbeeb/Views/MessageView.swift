@@ -146,7 +146,7 @@ struct MessageView: View {
     private var tasbeeb: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(m.edited ? "التسبيب (معدّل)" : "التسبيب").font(F.ui(12, .bold)).foregroundStyle(T.accent)
+                Text(verbatim: (m.title ?? "التسبيب") + (m.edited ? " (معدّل)" : "")).font(F.ui(12, .bold)).foregroundStyle(T.accent)
                 Spacer()
                 if !s.view.catName.isEmpty {
                     Text(verbatim: s.view.catName).font(F.ui(11, .semibold)).foregroundStyle(T.cat(s.view.cat).ink)

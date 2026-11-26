@@ -254,10 +254,18 @@ final class CaseSession: ObservableObject {
     }
 
     private func produce() {
-        let text = view.text
         var lines: [String] = []
         if view.generic { lines.append("هذا القسم بهيكل عام؛ عدّل النص ثم احفظه بـ«حفظ صياغتي» ليُستعمل لاحقاً.") }
-        post(Msg(role: .bot, kind: .tasbeeb, text: text, lines: lines))
+        if let parts = view.parts, !parts.isEmpty {
+            // كل جزء من الضبط في بطاقة مستقلة بزر نسخ خاص
+            for p in parts {
+                var m = Msg(role: .bot, kind: .tasbeeb, text: p.text)
+                m.title = p.title
+                post(m)
+            }
+        } else {
+            post(Msg(role: .bot, kind: .tasbeeb, text: view.text, lines: lines))
+        }
         rec.ready = true
         let a = view.alerts
         if !a.isEmpty {

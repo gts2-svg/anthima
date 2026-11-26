@@ -12,6 +12,34 @@ function maxAmount(text){
   return best;
 }
 const fmtNum = n => n ? n.toLocaleString('en-US') : '';
+/* ---------- المبالغ: قراءة، تمييز، تفقيط ---------- */
+const toNum = v => { const n = parseFloat(String(v||'').replace(/[٬,]/g,'').replace(/٫/g,'.')); return isFinite(n)?n:0; };
+// التمييز بحسب آخر جزء من العدد: (230) ريالاً، (3,000) ريال
+function rial(n){ n=Math.round(toNum(n)); const r=n%100; return (r>=11&&r<=99)?'ريالاً':'ريال'; }
+function tafqit(num){
+  const n0 = Math.round(toNum(num)); if(!n0) return '';
+  const ones=['','واحد','اثنان','ثلاثة','أربعة','خمسة','ستة','سبعة','ثمانية','تسعة'];
+  const teens=['عشرة','أحد عشر','اثنا عشر','ثلاثة عشر','أربعة عشر','خمسة عشر','ستة عشر','سبعة عشر','ثمانية عشر','تسعة عشر'];
+  const tens=['','','عشرون','ثلاثون','أربعون','خمسون','ستون','سبعون','ثمانون','تسعون'];
+  const hund=['','مائة','مائتان','ثلاثمائة','أربعمائة','خمسمائة','ستمائة','سبعمائة','ثمانمائة','تسعمائة'];
+  const below1000 = n => { const p=[]; const h=Math.floor(n/100), r=n%100;
+    if(h) p.push(hund[h]);
+    if(r){ if(r<10) p.push(ones[r]); else if(r<20) p.push(teens[r-10]); else { const o=r%10, t=Math.floor(r/10); p.push(o? ones[o]+' و'+tens[t] : tens[t]); } }
+    return p.join(' و'); };
+  const scale = (n, one, two, few, many) => { if(n===1) return one; if(n===2) return two; if(n>=3&&n<=10) return below1000(n)+' '+few; const r=n%100; return below1000(n)+' '+((r>=11&&r<=99)?many:one); };
+  const parts=[]; const mil=Math.floor(n0/1e6), th=Math.floor((n0%1e6)/1000), rest=n0%1000;
+  const tail = (n0%1e6)===0, tailK = rest===0; // إذا تلاه «ريال» مباشرة أضيف إليه
+  if(mil) parts.push(scale(mil,'مليون',tail?'مليونا':'مليونان','ملايين',tail?'مليون':'مليوناً'));
+  if(th) parts.push(scale(th,'ألف',tailK?'ألفا':'ألفان','آلاف',tailK?'ألف':'ألفاً'));
+  if(rest) parts.push(below1000(rest));
+  let w = parts.join(' و');
+  const r = n0%100;
+  if(n0===1) return 'ريال واحد'; if(n0===2) return 'ريالان';
+  if(r>=3&&r<=10 && rest) return w+' ريالات';
+  return w+' '+rial(n0);
+}
+const money2 = n => n? toNum(n).toLocaleString('en-US',{maximumFractionDigits:2}) : '';
+
 // يلتقط وصفاً قصيراً (عقار، سيارة…) ويقطعه عند أول كلمة فاصلة
 const STOP = /\s(بموجب|بالعقد|بعقد|العقد|بمبلغ|بقيمة|بثمن|لأن|لان|وطلب|ويطلب|وأجرته|واجرته|وأجرتها|وقد|وقدره|وقدرها|المملوك|المملوكة|بالصك|بصك|رقم الصك|و(ال)?(إ|ا)خلاء|و(إ|ا)لزام|وظهر|وتطلب|وطلبت|منذ|عليه|عليها|مني|منه|منها|إلى|الى|حيث|ل(ـ)?(انتهاء|عدم|مخالفة|تأخر|إخلال|اخلال)|بسبب|نتيجة|منذ)(\s|$|،)/;
 function nounPhrase(text, nouns){
@@ -140,7 +168,7 @@ T.loan = {cat:'huquqi', name:'مطالبة مالية (قرض أو سلفة)',
   wafaObj:'بالسداد',
   istizhar:'على عدم استيفائه المبلغ المدعى به',
   reason:c=>'والأصل بقاء الدين في ذمة المدين حتى يثبت وفاؤه،',
-  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`,
+  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`, money:c=>toNum(c.f.amount),
   alerts:c=>{const a=[]; if(c.ev.has('chats') && c.amt>100000) a.push({lvl:'warn',t:'المحادثات قرينة',b:'للمحكمة استنباط القرائن فيما يجوز إثباته بالشهادة فقط (المادة 85 من نظام الإثبات)، والمبلغ يتجاوز مئة ألف ريال.'}); return a}
 };
 
@@ -162,7 +190,7 @@ T.contract = {cat:'huquqi', name:'مطالبة بقيمة عقد (مقاولة �
   wafaObj:'بالسداد',
   istizhar:'على عدم استيفائه المبلغ المدعى به',
   reason:c=>'وحيث نفّذ المدعي ما التزم به، فيلزم الطرف الآخر الوفاء بالمقابل المتفق عليه، والأصل بقاء ما في الذمة حتى يثبت الوفاء،',
-  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`
+  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`, money:c=>toNum(c.f.amount)
 };
 
 T.injury = {cat:'huquqi', name:'تعويض عن إصابة',
@@ -181,7 +209,7 @@ T.injury = {cat:'huquqi', name:'تعويض عن إصابة',
   wafaObj:'بما يدفع الدعوى',
   istizhar:'على صحة دعواه',
   reason:c=>`وحيث ثبت وقوع الفعل من ${c.D} وما ترتب عليه من ضرر، ومن أضرّ بغيره لزمه التعويض،`,
-  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`
+  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`, money:c=>toNum(c.f.amount)
 };
 
 T.possession = {cat:'huquqi', name:'منع تعرض أو استرداد حيازة', urgent:1,
@@ -216,6 +244,7 @@ T.defect = {cat:'huquqi', name:'فسخ بيع لعيب أو الرجوع بفر�
   wafaObj:'بما يدفع الدعوى',
   istizhar:'على عدم علمه بالعيب وقت البيع وعدم رضاه به',
   reason:c=>'وحيث يضمن البائع سلامة المبيع من العيب الذي ينقص قيمته أو نفعه، وللمشتري عند ظهوره أن يفسخ البيع أو يمسك المبيع ويرجع بفرق الثمن، وفقاً للمادة الثامنة والثلاثين بعد الثلاثمائة من نظام المعاملات المدنية،',
+  money:c=>c.f.remedy==='إمساك المبيع والرجوع بفرق الثمن'?toNum(c.f.amount):0,
   ruling:c=>c.f.remedy==='إمساك المبيع والرجوع بفرق الثمن'?`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`:`بفسخ بيع ${B(c.f.item)}، وإلزام ${c.D} بأن ${c.g('يرد','ترد')} ${lam(c.P)} الثمن وقدره (${B(c.f.amount)}) ريال، وإلزام ${c.P} بإعادة المبيع إلي${c.h}`,
   alerts:c=>[{lvl:'warn',t:'شروط ضمان العيب — نظام المعاملات المدنية',checks:[
     'هل رُفعت الدعوى قبل انقضاء 180 يوماً من تسليم المبيع، أو كان البائع قد التزم بضمان أطول؟ (م344)',
@@ -278,26 +307,147 @@ T.qisma = {cat:'huquqi', name:'قسمة مال شائع',
     'هل للشركاء دائنون؟ يلزم إدخالهم في القسمة']}]
 };
 
-T.traffic = {cat:'murori', name:'تعويض عن حادث مروري',
-  kw:[[/حادث|الحادث/,2],[/نجم|تقرير المرور|نسبة الخطأ/,3],[/إصلاح|تلفيات|قيمة الإصلاح/,2]],
+/* ---------- المروري: قراءة الطلبات والبيانات من المحضر ---------- */
+const AMT_RE = /\(\s*([0-9][0-9,٬.٫]*)\s*\)|([0-9][0-9,٬.٫]*)\s*(?:ريال|ر\.س)|(?:مبلغ|قدره|وقدره|بمبلغ)\s*:?\s*([0-9][0-9,٬.٫]*)/;
+function reqSegment(t){
+  const i = t.search(/(لذا|لذلك|وعليه|عليه)?\s*(أطلب|اطلب|نطلب|يطلب|تطلب|وأطلب|واطلب|طلبت|وطلبت|وطلب|طالب(اً|ا)?)\s/);
+  if(i<0) return '';
+  let seg = t.slice(i, i+600);
+  const e = seg.search(/هذه دعوا|هكذا ادع|وبسؤال|وبعرض|هذا ما لدي/); if(e>0) seg = seg.slice(0,e);
+  return seg;
+}
+function reqKind(x){
+  if(/رسوم/.test(x)) return 'fees';
+  if(/أرش|ارش|نقص (ال)?قيمة|نقص (ال)?مركبة|نقص (ال)?سيارة/.test(x)) return 'arsh';
+  if(/إصلاح|اصلاح|تلفيات|قطع غيار/.test(x)) return 'repair';
+  if(/أجرة|اجرة|بديلة|تأجير/.test(x)) return 'rental';
+  return 'other';
+}
+function trafficRequests(t){
+  const seg = reqSegment(t); if(!seg) return [];
+  let items = seg.split(/(?:^|[\s:،.])[1-9]\s*[-–)]\s*(?=[؀-ۿ])/).slice(1);
+  if(!items.length) items = [seg];
+  const out=[];
+  for(const it of items){ const m = it.match(AMT_RE); if(!m) continue; const n = toNum(m[1]||m[2]||m[3]); if(n>0) out.push({kind:reqKind(it), amount:n, text:it.trim().slice(0,80)}); }
+  return out;
+}
+function hdate(v){ v=(v||'').replace(/\s+/g,''); return v && /^[0-9]{4}\//.test(v) && +v.slice(0,4)<1600 ? v+'هـ' : v; }
+const CITIES = 'الرياض|جدة|مكة المكرمة|مكة|المدينة المنورة|الدمام|الخبر|الطائف|تبوك|أبها|بريدة|حائل|جازان|نجران|الأحساء|القصيم|ينبع|الخرج|خميس مشيط|الجبيل|القطيف|عرعر|سكاكا|الباحة';
+const TR = {
+  damage:t=>{ const r=trafficRequests(t); if(r.some(x=>x.kind==='arsh')) return 'أرش نقص قيمة المركبة'; if(r.some(x=>x.kind==='repair')) return 'قيمة إصلاح المركبة'; return /أرش|ارش|نقص (ال)?قيمة/.test(t)?'أرش نقص قيمة المركبة':(/إصلاح|اصلاح|تلفيات/.test(t)?'قيمة إصلاح المركبة':''); },
+  amount:t=>{ const r=trafficRequests(t).filter(x=>x.kind==='arsh'||x.kind==='repair'||x.kind==='other'); return r.length? money2(r.reduce((p,x)=>p+x.amount,0)) : ''; },
+  fees:t=>{ const r=trafficRequests(t).filter(x=>x.kind==='fees'); return r.length? money2(r.reduce((p,x)=>p+x.amount,0)) : ''; },
+  rental:t=>{ const r=trafficRequests(t).filter(x=>x.kind==='rental'); return r.length? money2(r.reduce((p,x)=>p+x.amount,0)) : ''; },
+  ratio:t=>firstMatch(t,/(?:نسبة (?:ال)?(?:خطأ|خطا|مسؤولية)|(?:الخطأ|الخطا|المسؤولية)\s*(?:كاملاً|كاملة|كامل)?\s*بنسبة)[^0-9\n]{0,25}([0-9]{1,3})\s*[%٪]/,1),
+  car:t=>{ let c=firstMatch(t,/(?:مركبت(?:ي|ه|ها)|سيارت(?:ي|ه|ها)|المركبة|السيارة)\s+(?:من\s+)?(?:نوع|ماركة|طراز)\s*:?\s*([^،.\n(]{2,40}?)(?=\s*(?:موديل|لوحة|رقم|،|\.|$|\n|و))/,1); const y=firstMatch(t,/موديل\s*:?\s*\(?\s*([0-9]{4})/,1); if(c&&y) c+='، موديل '+y+'م'; return c.trim(); },
+  plate:t=>firstMatch(t,/لوح(?:ة|تها|ته)\s*(?:رقم|رقمها)?\s*:?\s*\(?\s*([؀-ۿA-Za-z ]{1,12}\s*[0-9]{1,4}|[0-9]{1,4}\s*[؀-ۿA-Za-z ]{1,12})/,1).replace(/\s+/g,' ').trim(),
+  accDate:t=>hdate(firstMatch(t,/(?:حادث|الحادث|وقع|حصل)[^.\n]{0,60}?(?:بتاريخ|في تاريخ|وتاريخ|يوم)\s*:?\s*([0-9]{1,4}\s*\/\s*[0-9]{1,2}\s*\/\s*[0-9]{1,4})/,1) || firstMatch(t,/(?:بتاريخ|في تاريخ|يوم)\s*:?\s*([0-9]{1,4}\s*\/\s*[0-9]{1,2}\s*\/\s*[0-9]{1,4})\s*(?:هـ|ه|م)?\s*،?\s*(?:وقع|حصل|حدث|تعرضت|اصطدم|صدم)/,1)),
+  accPlace:t=>{ const city=firstMatch(t,new RegExp('(?:في|ب|بمدينة|مدينة)\\s*('+CITIES+')'),1); const st=firstMatch(t,/((?:شارع|طريق|تقاطع)\s+[^،.\n]{2,35}?)(?=\s*(?:،|\.|$|\n|و(?:قد|كان|كنت)|حيث))/,1); return [city?'ب'+city:'', st].filter(Boolean).join('، '); },
+  noticeNo:t=>firstMatch(t,/مهمة\s+(?:ال)?تبليغ\s*(?:رقم|برقم)?\s*\(?\s*([0-9]{5,})/,1),
+  issuer:t=>/نجم/.test(t)?'شركة نجم لخدمات التأمين':(/مرور|المرور|مروري/.test(t)?'الإدارة العامة للمرور':''),
+  reportNo:t=>firstMatch(t,/(?:تقرير|محضر)\s+(?:ال)?حادث[^0-9\n]{0,40}?(?:رقم|برقم)\s*\(?\s*([0-9]{5,})/,1),
+  reportDate:t=>hdate(firstMatch(t,/(?:تقرير|محضر)\s+(?:ال)?حادث[^\n]{0,80}?(?:وتاريخ|بتاريخ)\s*([0-9]{1,4}\s*\/\s*[0-9]{1,2}\s*\/\s*[0-9]{1,4})/,1)),
+  valBefore:t=>money2(toNum(firstMatch(t,/قبل (?:ال)?حادث[^0-9\n]{0,30}\(?\s*([0-9][0-9,٬.]*)/,1))),
+  valAfter:t=>money2(toNum(firstMatch(t,/بعد (?:ال)?حادث[^0-9\n]{0,30}\(?\s*([0-9][0-9,٬.]*)/,1)))
+};
+const mq = v => (v && String(v).trim()) ? `(${String(v).trim()})` : '(…)';
+T.traffic = {cat:'murori', name:'تعويض عن حادث مروري', money:c=>toNum(c.f.amount)+toNum(c.f.fees)+toNum(c.f.rental),
+  kw:[[/حادث|الحادث/,2],[/نجم|تقرير المرور|نسبة الخطأ/,3],[/إصلاح|تلفيات|قيمة الإصلاح|أرش|ارش/,2]],
   fields:[
     {k:'role',label:'صفة المدعى عليه',kind:'choice',req:1,options:['السائق المتسبب','المالك وحده وغير مفرط','المالك مفرط أو متعدٍّ'],detect:t=>/مالك (ال)?(سيارة|مركبة)|بصفته (ال)?مالك/.test(t)?'':'السائق المتسبب'},
-    {k:'ratio',label:'نسبة الخطأ على المدعى عليه',kind:'text',req:1,detect:t=>firstMatch(t,/نسبة (ال)?(خطأ|خطا)[^0-9٠-٩]{0,25}([0-9]{1,3})\s*[%٪]/,3)},
-    {k:'amount',label:'المبلغ',kind:'text',req:1,detect:t=>fmtNum(maxAmount(t))}
+    {k:'damage',label:'نوع المطالبة',kind:'choice',req:1,options:['أرش نقص قيمة المركبة','قيمة إصلاح المركبة'],detect:TR.damage},
+    {k:'amount',label:'مبلغ الأرش أو الإصلاح',kind:'text',req:1,detect:TR.amount},
+    {k:'fees',label:'رسوم التقدير',kind:'text',detect:TR.fees},
+    {k:'rental',label:'أجرة سيارة بديلة',kind:'text',detect:TR.rental},
+    {k:'ratio',label:'نسبة الخطأ على المدعى عليه %',kind:'text',req:1,detect:TR.ratio},
+    {k:'car',label:'المركبة (النوع والموديل)',kind:'text',detect:TR.car,ph:'لكزس ES 350، موديل 2021م'},
+    {k:'plate',label:'رقم اللوحة',kind:'text',detect:TR.plate},
+    {k:'accDate',label:'تاريخ الحادث',kind:'text',detect:TR.accDate,ph:'1447/10/2هـ'},
+    {k:'accPlace',label:'مكان الحادث',kind:'text',detect:TR.accPlace,ph:'بالرياض، شارع …'},
+    {k:'noticeNo',label:'رقم مهمة التبليغ',kind:'text',detect:TR.noticeNo,when:c=>c.pos==='absN'},
+    {k:'issuer',label:'جهة تقرير الحادث',kind:'choice',options:['الإدارة العامة للمرور','شركة نجم لخدمات التأمين'],detect:TR.issuer},
+    {k:'reportNo',label:'رقم تقرير الحادث',kind:'text',detect:TR.reportNo},
+    {k:'reportDate',label:'تاريخ تقرير الحادث',kind:'text',detect:TR.reportDate},
+    {k:'valBefore',label:'قيمة المركبة قبل الحادث',kind:'text',detect:TR.valBefore,when:c=>c.f.damage==='أرش نقص قيمة المركبة'},
+    {k:'valAfter',label:'قيمة المركبة بعد الحادث',kind:'text',detect:TR.valAfter,when:c=>c.f.damage==='أرش نقص قيمة المركبة'}
   ],
   ev:[
-    {id:'report',label:'تقرير الحادث (نجم أو المرور)',kw:/نجم|تقرير (ال)?(مرور|حادث)/,item:c=>'تقرير الحادث'},
-    {id:'estimate',label:'تقدير قيمة الإصلاح',kw:/تقدير|تقييم|إصلاح|اصلاح|فاتورة/,item:c=>'تقدير قيمة الإصلاح'}
+    {id:'istimara',label:'استمارة السيارة',kw:/استمار/,item:c=>'استمارة ملكية المركبة',said:'استمارة السيارة'},
+    {id:'report',label:'تقرير الحادث',kw:/نجم|تقرير (ال)?(مرور|حادث)|محضر (ال)?حادث/,item:c=>`تقرير الحادث الصادر من ${c.f.issuer||'الإدارة العامة للمرور'}`,said:'تقرير الحادث المروري'},
+    {id:'estimate',label:'تقدير مركز تقدير',kw:/تقدير|تقييم|مقدر/,item:c=>'تقدير مركز تقدير',said:'تقدير مركز تقدير'},
+    {id:'receipt',label:'إيصال سداد رسوم التقدير',kw:/إيصال|ايصال|سداد رسوم|فاتورة/,item:c=>'إيصال سداد رسومه',said:'إيصال سداد رسوم المركز'}
   ],
-  claim:c=>`إلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${c.pl} مبلغ (${B(c.f.amount)}) ريال، قيمة ما لحق مركبت${c.pp} من تلفيات في الحادث`,
-  admit:c=>'بالحادث وبنسبة الخطأ',
-  wafaObj:'بما يدفع الدعوى',
-  istizhar:'على صحة دعواه',
-  reason:c=>`وحيث ثبت أن نسبة الخطأ على ${c.D} (${B(c.f.ratio)}%)، والمتسبب ضامن لما أتلفه بقدر خطئه،`,
-  ruling:c=>`بإلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${lam(c.P)} مبلغاً قدره (${B(c.f.amount)}) ريال`,
-  special:c=>c.f.role==='المالك وحده وغير مفرط'?`فبناءً على ما تقدم من الدعوى${c.attended?' والإجابة':''}، ولما كان ${c.P} يقيم دعواه على ${c.D} بصفته مالكاً للمركبة، ولم يثبت تفريطه ولا تعدّيه، والمالك غير المفرط ولا المتعدي لا يضمن خطأ السائق، وعليه فقد حكمت الدائرة بعدم قبول الدعوى لرفعها على غير ذي صفة، و${lam(c.P)} حق الاعتراض.`:'',
-  alerts:c=>{const a=[]; if(c.f.role==='المالك وحده وغير مفرط') a.unshift({lvl:'red',t:'الدعوى على المالك وحده',b:'المالك غير المفرط ولا المتعدي: يُحكم بعدم قبول الدعوى لرفعها على غير ذي صفة، وللمدعي حق الاعتراض.'}); return a}
+  claim:c=>`إلزام ${c.D} بأن ${c.g('يدفع','تدفع')} ${c.pl} مبلغ (${B(c.f.amount)}) ريال`,
+  admit:c=>'بالحادث وبنسبة الخطأ', wafaObj:'بما يدفع الدعوى', istizhar:'على صحة دعواه',
+  reason:c=>'', ruling:c=>'',
+  total:c=>{ const r=toNum(c.f.ratio); const sum=toNum(c.f.amount)+toNum(c.f.fees)+toNum(c.f.rental); return (r>0&&r<100)? Math.round(sum*r/100*100)/100 : sum; },
+  build:c=>trafficBuild(c),
+  special:c=>c.f.role==='المالك وحده وغير مفرط'?`فبناءً على ما تقدم من الدعوى${c.attended?' والإجابة':''}، ولما كان ${c.P} يقيم دعواه على ${c.D} بصفته مالكاً للمركبة، ولم يثبت تفريطه ولا تعدّيه، والمالك غير المفرط ولا المتعدي لا يضمن خطأ السائق، وعليه فقد حكمت الدائرة بعدم قبول الدعوى لرفعها على غير ذي صفة.`:'',
+  alerts:c=>{const a=[];
+    if(c.f.role==='المالك وحده وغير مفرط') a.unshift({lvl:'red',t:'الدعوى على المالك وحده',b:'المالك غير المفرط ولا المتعدي: يُحكم بعدم قبول الدعوى لرفعها على غير ذي صفة.'});
+    const rq=trafficRequests(c.text), got=rq.reduce((p,x)=>p+x.amount,0), mine=toNum(c.f.amount)+toNum(c.f.fees)+toNum(c.f.rental);
+    if(got && mine && Math.abs(got-mine)>0.5) a.push({lvl:'red',t:'المبلغ لا يطابق طلبات المحضر',b:`طلبات المدعي في المحضر مجموعها (${money2(got)}) ريال، والمدخل (${money2(mine)}) ريال. تحقق قبل الحكم.`});
+    const r=toNum(c.f.ratio); if(r>0&&r<100&&mine) a.push({lvl:'warn',t:`نسبة الخطأ ${r}%`,b:`حُسب المحكوم به بقدر النسبة من مجموع الطلبات (${money2(mine)} × ${r}%) = ${money2(T.traffic.total(c))} ريال، بما فيها الرسوم. عدّل إن كان اجتهادك غير ذلك.`});
+    for(const x of rq.filter(x=>x.kind==='other')) a.push({lvl:'warn',t:'طلب لم أصنّفه',b:`«${x.text}» بمبلغ (${money2(x.amount)}) ريال، وأضفته إلى مبلغ الأرش أو الإصلاح. افصله إن لزم.`});
+    return a;}
 };
+
+/* الضبط المروري: إجابة البينة، ثم الرصد وإقفال المرافعة، ثم التسبيب والحكم — على قالب القاضي */
+function trafficBuild(c){
+  const f=c.f, P=c.P, D=c.D, g=c.g, gp=c.gp, ev=c.ev, t=T.traffic;
+  const arsh = f.damage!=='قيمة إصلاح المركبة';
+  const parts=[];
+  // 1) إجابة المدعي عن بينته — إن لم ترد في المحضر
+  const said = t.ev.filter(e=>ev.has(e.id)).map(e=>e.said);
+  if(!/عن بينت(ه|ها)|بينته\s*؟|بينتها\s*؟/.test(c.text) && said.length)
+    parts.push({title:'بينة المدعي', text:`وبسؤال ${P} عن ${gp('بينته','بينتها')}؟ ${gp('أجاب','أجابت')} ${gp('بقوله','بقولها')}: ${said.join('، ')}. هكذا ${gp('أجاب','أجابت')}.`});
+  // 2) الرصد
+  const rs=[];
+  if(ev.has('istimara')) rs.push(`استمارة الملكية فتبين أن المركبة ملك ${lam(P)}`);
+  if(ev.has('report')) rs.push(`تقرير الحادث الصادر من ${f.issuer||'الإدارة العامة للمرور'} برقم ${mq(f.reportNo)} وتاريخ ${B(f.reportDate)}، والمتضمن تحمل ${D} الخطأ بنسبة (${B(f.ratio)}%)`);
+  if(ev.has('estimate')) rs.push(arsh
+    ? `تقدير مركز تقدير المتضمن أن قيمة المركبة قبل الحادث ${mq(f.valBefore)} ${rial(f.valBefore)}، وبعده ${mq(f.valAfter)} ${rial(f.valAfter)}، وأن أرش نقص قيمتها ${mq(f.amount)} ${rial(f.amount)}`
+    : `تقدير مركز تقدير المتضمن أن قيمة إصلاح المركبة ${mq(f.amount)} ${rial(f.amount)}`);
+  if(ev.has('receipt')) rs.push(`إيصال سداد رسوم مركز تقدير بمبلغ ${mq(f.fees)} ${rial(f.fees)}`);
+  let r2 = rs.map((x,i)=>(i===0?'وقد اطلعت الدائرة على ':'كما اطلعت الدائرة على ')+x).join('. ');
+  r2 = (r2? r2+'؛ هكذا تضمنت. ' : '') + 'وعليه قررت الدائرة إقفال باب المرافعة والنطق بالحكم.';
+  parts.push({title:'رصد البينات', text:r2});
+  // 3) التسبيب والحكم
+  const car = [f.car, f.plate?'لوحة رقم '+f.plate:''].filter(Boolean).join('، ');
+  const reqs = [`بمبلغ ${mq(f.amount)} ${rial(f.amount)} ${arsh?`قيمة التعويض عن الضرر الذي لحق ${gp('مركبته','مركبتها')}`:`قيمة إصلاح ما لحق ${gp('مركبته','مركبتها')} من تلفيات`}${car?` (${car})`:''}`];
+  if(f.fees) reqs.push(`ومبلغ ${mq(f.fees)} ${rial(f.fees)} رسوم تقدير`);
+  if(f.rental) reqs.push(`ومبلغ ${mq(f.rental)} ${rial(f.rental)} أجرة سيارة بديلة`);
+  const o=[];
+  o.push(`فبناءً على ما تقدم من الدعوى${c.attended?' والإجابة':''}، ولكون ${P} ${gp('تقدم','تقدمت')} بهذه الدعوى وفيها ${gp('يطلب','تطلب')} إلزام ${D} ${reqs.join('، ')}، وذلك استناداً لواقعة حادث سير وقع بتاريخ ${B(f.accDate)} ${f.accPlace||'(…)'}؛ والذي ${g('تسبب','تسببت')} فيه ${D} وكانت نسبة الخطأ ${g('عليه','عليها')} (${B(f.ratio)}%)، ولأن هذه القضية ناشئة عن حادث سير فهي من اختصاص الدائرة بموجب المادة (31/ج) من نظام المرافعات الشرعية.`);
+  switch(c.pos){
+    case 'absN': o.push(`وبما أن ${D} قد ${g('تبلغ','تبلغت')} بموعد هذه الجلسة بموجب مهمة التبليغ رقم ${mq(f.noticeNo)} ولم ${g('يحضر','تحضر')} ولم ${g('يتقدم','تتقدم')} بعذر تقبله الدائرة؛ مما ${g('تعده','تعدها')} الدائرة ${g('ناكلاً','ناكلة')} عن الحضور والجواب.`); break;
+    case 'absX': o.push(`وبما أن ${D} لم ${g('يحضر','تحضر')} رغم ${g('تبليغه','تبليغها')} بموعد الجلستين، ولم ${g('يتبلغ','تتبلغ')} لشخص${c.h}.`); break;
+    case 'iqrar': o.push(`وبما أن ${D} ${g('أقر','أقرت')} بالحادث وبنسبة الخطأ، والإقرار حجة قاصرة على المقر.`); break;
+    case 'inkar': o.push(`وبما أن ${D} ${g('أنكر','أنكرت')} الدعوى.`); break;
+    case 'nokol': o.push(`وبما أن ${D} ${g('امتنع','امتنعت')} عن الجواب رغم ${g('إنذاره','إنذارها')}؛ مما ${g('تعده','تعدها')} الدائرة ${g('ناكلاً','ناكلة')} عن الجواب.`); break;
+    case 'agentDef': o.push(insuranceDefense()?`وبما أن وكيل ${D} حضر ولم ${g('يدفع','تدفع')} بما يؤثر في الدعوى.`:`وبما أن وكيل ${D} حضر ودفع ${withBa(f.defense)}، وهذا الدفع غير مؤثر في الدعوى ${f.reply?f.reply:'لـ(…)'}.`); break;
+    case 'wafa': o.push(`وبما أن ${D} ${g('أقر','أقرت')} بأصل الحق ${g('ودفع','ودفعت')} بما يدفع الدعوى، ولم ${g('يقدّم','تقدّم')} بينة على ما ${g('دفع','دفعت')} به.`); break;
+    default: o.push(`وبما أن (موقف ${D}).`);
+  }
+  const evNames = t.ev.filter(e=>ev.has(e.id)).map(e=>e.item(c));
+  const seen=[];
+  if(ev.has('istimara')) seen.push(`استمارة الملكية فتبين لها أن ${P} هو مالك المركبة`.replace(/المدعية هو/,'المدعية هي'));
+  if(ev.has('report')) seen.push(`تقرير الحادث المتضمن وقوع الحادث بين مركبة ${P} ومركبة ${D}، و${g('تحميله','تحميلها')} ${toNum(f.ratio)===100?'كامل المسؤولية عن الحادث':'المسؤولية عن الحادث'} بنسبة (${B(f.ratio)}%)`);
+  let s3 = evNames.length? `ولكون ${P} ${gp('تقدم','تقدمت')} ${gp('ببينته','ببينتها')} الموصلة لما ${gp('يدعيه','تدعيه')}، وهي ${evNames.join('، و')}` : '';
+  if(seen.length) s3 += `، وبما أن الدائرة اطلعت على ${seen.join('، واطلعت على ')}`;
+  if(s3) o.push(s3+'.');
+  const prov=[];
+  if(ev.has('estimate')) prov.push(arsh?`من تقدير مركز تقدير أن قيمة أرش نقص المركبة ${mq(f.amount)} ${rial(f.amount)}`:`من تقدير مركز تقدير أن قيمة إصلاح المركبة ${mq(f.amount)} ${rial(f.amount)}`);
+  if(ev.has('receipt') && f.fees) prov.push(`ومن إيصال سداد رسوم مركز تقدير أن ${P} ${gp('سدد','سددت')} عنها مبلغ ${mq(f.fees)} ${rial(f.fees)}`);
+  let s4 = prov.length? `ولما ثبت للدائرة ${prov.join('، ')}، و` : 'و';
+  s4 += 'بناءً على المادة (120) من نظام المعاملات المدنية ونصها: "كل خطأ سبب ضرراً للغير يُلزم من ارتكبه بالتعويض"، والمادة (122/1) من ذات النظام ونصها: "يكون الشخص مسؤولاً عن الفعل الضار متى صدر منه وهو مميز".';
+  o.push(s4);
+  const tot = t.total(c);
+  o.push(`وعليه ومن أجل ذلك كله. حكمت الدائرة بإلزام ${D} بأن ${g('يؤدي','تؤدي')} ${lam(P)} مبلغاً وقدره (${tot?money2(tot):'…'}) ${tot?rial(tot):'ريال'}${tot?` (${tafqit(tot)})`:''}، وبذلك حكمت والله أعلم وأحكم.`);
+  o.push(closing(c, toNum(f.amount)+toNum(f.fees)+toNum(f.rental), true));
+  parts.push({title:'التسبيب والحكم', text:o.join(' ').replace(/\s+/g,' ').trim()});
+  return parts;
+}
 
 T.ahwal = {cat:'ahwal', name:'دعوى أحوال شخصية (هيكل عام)', generic:1, kw:[[/./,0]], fields:[], ev:[],
   claim:c=>'(موضوع الطلب)', admit:c=>'بما ورد في الدعوى', wafaObj:'بما يدفع الدعوى', istizhar:'على صحة دعواه',
@@ -432,11 +582,13 @@ function needOutcome(){ return ['inkar','wafa','agentDef'].includes(S.f.pos) && 
 function generate(){
   const t = T[S.type]; if(!t) return '';
   const c = ctx();
-  if(t.special){ const sp = t.special(c); if(sp) return sp; }
+  if(t.special){ const sp = t.special(c); if(sp) return t.build ? [{title:'التسبيب والحكم', text:sp+' '+closing(c, claimMoney(c), true)}] : sp+' '+closing(c, claimMoney(c)); }
   const pos = S.f.pos;
   if(pos==='absX' && S.f.session!=='جلسة لاحقة'){
+    if(t.build) return [{title:'القرار', text:`نظراً لعدم حضور ${c.D} وعدم ${c.g('تبلّغه','تبلّغها')} لشخص${c.h} بموعد الجلسة، فقد قررت الدائرة تأجيل نظر الدعوى إلى جلسة لاحقة ${c.g('يُبلّغ','تُبلّغ')} بها ${c.D}، وفقاً للمادة السابعة والخمسين من نظام المرافعات الشرعية.`}];
     return `نظراً لعدم حضور ${c.D} وعدم ${c.g('تبلّغه','تبلّغها')} لشخص${c.h} بموعد الجلسة، فقد قررت الدائرة تأجيل نظر الدعوى إلى جلسة لاحقة ${c.g('يُبلّغ','تُبلّغ')} بها ${c.D}، وفقاً للمادة السابعة والخمسين من نظام المرافعات الشرعية.`;
   }
+  if(t.build) return t.build(c);
   const reject = needOutcome() && S.f.outcome==='رد الدعوى';
   const P=c.P, D=c.D, g=c.g, h=c.h;
   const out=[];
@@ -477,7 +629,22 @@ function generate(){
   if(pos==='absN') out.push(`ويُعدّ الحكم حضورياً في ${g('حقه','حقها')}، وبذلك حكمت.`);
   else if(pos==='absX') out.push(`ويُعدّ الحكم غيابياً، و${lam(D)} حق الاعتراض عليه متى ${g('تبلّغ','تبلّغت')} به، فإن تعذّر تبليغ${h} بالحكم رُفع إلى محكمة الاستئناف لتدقيقه وفقاً للفقرة (4) من المادة الخامسة والثمانين بعد المائة من نظام المرافعات الشرعية، وبذلك حكمت.`);
   else out.push('وبذلك حكمت.');
+  const cl = closing(c, claimMoney(c)); if(cl) out.push(cl);
   return out.join(' ').replace(/،\s*وبذلك/,'، وبذلك').replace(/\(\(…\)\)/g,'(…)').replace(/\s+/g,' ').trim();
+}
+
+
+/* الختام: قطعية الدعاوى اليسيرة (50 ألفاً فأقل) أو إفهام الطرفين بالاعتراض */
+const YASIRA = 50000;
+function claimMoney(c){ const t=T[S.type]; return t && t.money ? t.money(c) : 0; }
+function isYasira(c, amt){ return c.pos!=='absX' && amt>0 && amt<=YASIRA; }
+function closing(c, amt, withAbsX){
+  const t=T[S.type], D=c.D, P=c.P, g=c.g, gp=c.gp;
+  if(c.pos==='absX') return withAbsX ? `ويُعدّ الحكم غيابياً، و${lam(D)} حق الاعتراض عليه متى ${g('تبلّغ','تبلّغت')} به، فإن تعذّر تبليغ${c.h} بالحكم رُفع إلى محكمة الاستئناف لتدقيقه وفقاً للفقرة (4) من المادة الخامسة والثمانين بعد المائة من نظام المرافعات الشرعية.` : '';
+  if(isYasira(c, amt)) return 'ويكون هذا الحكم مكتسباً للقطعية، وغير قابل للاعتراض؛ كون مبلغ المطالبة لا يزيد عن خمسين ألف ريال. وبه انتهت القضية.';
+  const mdd = t && t.urgent ? 'عشرة أيام' : 'ثلاثين يوماً';
+  if(c.pos==='absN') return `وأفهمت الدائرة ${P} بأن ${gp('له','لها')} الاعتراض على الحكم بطلب الاستئناف خلال ${mdd} من تاريخ تسلّم صورة صك الحكم، وأن ${lam(D)} حق الاعتراض خلال المدة ذاتها من تاريخ ${g('تبلّغه','تبلّغها')} بالحكم، فإن لم يُقدَّم الاعتراض خلالها اكتسب الحكم القطعية.`;
+  return `وأفهمت الدائرة الطرفين بأن لمن لم يقنع بالحكم الاعتراض عليه بطلب الاستئناف خلال ${mdd} من تاريخ تسلّم صورة صك الحكم، فإن لم يُقدَّم الاعتراض خلالها اكتسب الحكم القطعية.`;
 }
 
 /* ================= التنبيهات ================= */
@@ -499,7 +666,9 @@ function buildAlerts(){
     a.push({lvl:'red',t:c.amt>100000?'المبلغ يتجاوز مئة ألف ريال':'قيمة التصرف غير محددة',b:'يجب أن يثبت بالكتابة كل تصرف تزيد قيمته على مئة ألف ريال أو كان غير محدد القيمة (المادة 66 من نظام الإثبات)، فلا تقبل الشهادة إلا في حالات المادة 68: مبدأ الثبوت بالكتابة، أو المانع المادي أو الأدبي، أو فقد الدليل الكتابي بسبب لا يد للمدعي فيه. والقيد على التصرفات لا الوقائع المادية.'});
   if(t.alerts) a.push(...t.alerts(c));
   if(typeof attAlerts==='function') a.unshift(...attAlerts());
-  a.push({lvl:'info',t:`مدة الاعتراض: ${t.urgent?'10 أيام':'30 يوماً'}`,b:t.urgent?'الدعوى مستعجلة (المادة 187 من نظام المرافعات الشرعية).':'الدعوى ليست مستعجلة.'});
+  const cm = claimMoney(c);
+  if(isYasira(c, cm)) a.push({lvl:'info',t:'حكم قطعي',b:`مبلغ المطالبة (${money2(cm)}) ريال لا يزيد على خمسين ألف ريال، فالحكم غير قابل للاعتراض (قرار المجلس الأعلى للقضاء رقم 41/19/2 وتاريخ 25/10/1441هـ).`});
+  else if(pos!=='absX') a.push({lvl:'info',t:`مدة الاعتراض: ${t.urgent?'10 أيام':'30 يوماً'}`,b:(t.urgent?'الدعوى مستعجلة (المادة 187 من نظام المرافعات الشرعية).':'الدعوى ليست مستعجلة.')+(t.money?'':' والطلب ليس مالياً محضاً، فلا يدخل في الدعاوى اليسيرة.')+(t.money&&!cm?' ولم يتحدد المبلغ بعد.':'')});
   if(t.generic) a.unshift({lvl:'warn',t:'هيكل عام',b:'قوالب هذا القسم لم تُبنَ بعد. عدّل النص ثم احفظه بـ«حفظ كنموذج جديد» ليُستعمل في القضايا القادمة.'});
   return a;
 }
@@ -617,6 +786,7 @@ function applyAttachments(){
   fillFromDoc('deedNo', firstItem('deed','deedNo'), 'رقم الصك');
   if(['ownRE','ownCar','defect','shufaa'].includes(S.type)) fillFromDoc('amount', firstItem('sale','price'), 'الثمن');
   if(S.type==='injury') fillFromDoc('amount', firstItem('shijaj','amount'), 'المبلغ المقدّر');
+  if(S.type==='traffic'){ fillFromDoc('reportNo', firstItem('najm','reportNo'), 'رقم تقرير الحادث'); const rd=firstItem('najm','date'); if(rd && !S.f.reportDate){ S.f.reportDate=hdate(rd); S.st.reportDate='unc'; } }
   if(S.type==='traffic'){ const r = firstItem('najm','ratios'); const ns=(r.match(/[0-9]+/g)||[]).map(Number); if(ns.length && !S.f.ratio){ S.f.ratio=String(Math.max(...ns)); S.st.ratio='unc'; } }
 }
 function toDate(s){
@@ -700,7 +870,7 @@ const TB = {
   },
   setField(st, k, v){
     TB._load(st); S.f[k] = String(v == null ? '' : v).trim(); S.st[k] = S.f[k] ? 'user' : 'mis';
-    if(typeof applyAttachments === 'function' && (k === 'contractNo' || k === 'deedNo' || k === 'amount')) applyAttachments();
+    if(typeof applyAttachments === 'function' && (k === 'contractNo' || k === 'deedNo' || k === 'amount' || k === 'reportNo')) applyAttachments();
     return TB._dump();
   },
   toggleEv(st, id){ TB._load(st); S.ev.has(id) ? S.ev.delete(id) : S.ev.add(id); return TB._dump(); },
@@ -727,9 +897,9 @@ const TB = {
     const c = ctx();
     const chips = t ? t.ev.concat(EV_COMMON.filter(e => !e.when || e.when(c))).map(e => ({id:e.id, label:e.label, on:S.ev.has(e.id)})) : [];
     const alerts = buildAlerts().map(a => ({lvl:a.lvl, title:a.t, body:a.b || '', checks:a.checks || []}));
-    let text = ''; try { text = generate(); } catch(e) { text = 'تعذّرت الصياغة: ' + e.message; }
+    let text = '', parts = []; try { const g = generate(); if(Array.isArray(g)){ parts = g; text = g.map(x=>x.text).join('\n\n'); } else text = g; } catch(e) { text = 'تعذّرت الصياغة: ' + e.message; }
     return JSON.stringify({cat:S.cat, catName:CATS[S.cat] || '', type:S.type, typeName:t ? t.name : '', conf:S.conf,
-      generic:!!(t && t.generic), fields, chips, alerts, text,
+      generic:!!(t && t.generic), fields, chips, alerts, text, parts,
       docs:S.atts.map(a => ({type:a.doc ? a.doc.type : 'other', label:a.doc ? a.doc.label : 'مستند', items:a.doc ? Object.values(a.doc.items) : [], weak:!!(a.ocr && a.conf < 70), name:a.name}))});
   },
   tokenize(st, text){ TB._load(st); return tokenize(text); },

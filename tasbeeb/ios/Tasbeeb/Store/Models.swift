@@ -28,6 +28,7 @@ struct Msg: Codable, Identifiable, Hashable {
     var level: String = ""             // للمعلومات الملونة: red | warn
     var lines: [String] = []           // سطور إضافية (بيانات مرفق، تعارضات)
     var edited = false                 // عدّل القاضي نص التسبيب
+    var title: String? = nil           // عنوان جزء الضبط (رصد البينات، التسبيب والحكم…)
     var date = Date()
 
     func label(at i: Int) -> String { i < labels.count ? labels[i] : options[i] }
