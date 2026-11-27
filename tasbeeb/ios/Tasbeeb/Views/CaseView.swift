@@ -37,6 +37,9 @@ struct CaseView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 14)
+                    // iPad: عرض مقروء لنص التسبيب بدل امتداده على عرض الشاشة كله
+                    .frame(maxWidth: 820)
+                    .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: s.rec.messages.count) { _, _ in
@@ -75,6 +78,7 @@ struct CaseView: View {
         .sheet(isPresented: $showAlerts) { AlertsSheet(s: s) }
         .sheet(isPresented: $showDetails) { DetailsSheet(s: s) }
         .sheet(item: $editing) { m in EditSheet(s: s, msg: m) }
+        .onDisappear { s.discardIfEmpty() }
     }
 
     // MARK: الشريط العلوي

@@ -12,14 +12,27 @@ final class CaseSession: ObservableObject {
     private let store = CaseStore.shared
 
     init(_ rec: CaseRecord) {
-        self.rec = rec
+        var r = rec
+        // فقاعة «أقرأ المرفق…» محفوظة من جلسة انقطعت أثناء القراءة: لا قراءة جارية الآن
+        r.messages.removeAll { $0.kind == .working }
+        self.rec = r
         refresh()
     }
+
+    /// عدد المرفقات قيد القراءة (صور وملفات PDF قد تُقرأ في الوقت نفسه)
+    private var reading = 0
 
     // MARK: أدوات
 
     private func refresh() {
-        view = rec.minutes.isEmpty && rec.state == "{}" ? .empty : engine.view(rec.state)
+        if rec.minutes.isEmpty && rec.state == "{}" {
+            view = .empty
+        } else {
+            let v = engine.view(rec.state)
+            // تعذّر فك ما أعاده المحرك: أبقِ آخر عرض سليم بدل مسح النوع والتصنيف
+            if v.type.isEmpty && !view.type.isEmpty { return }
+            view = v
+        }
         rec.cat = view.cat
         rec.typeName = view.typeName
     }
@@ -55,7 +68,7 @@ final class CaseSession: ObservableObject {
             rec.state = engine.analyze(text, state: rec.state)
             refresh()
             askType()
-        } else if let q = pendingTextQuestion, let k = q.key {
+        } else if let q = pendingTextQuestion, let k = q.key, text.count <= 300, !text.contains("\n") {
             answerMark(q.id, text)
             let field = k.hasPrefix("__confirm:") ? String(k.dropFirst(10)) : k
             rec.state = engine.setField(rec.state, field, text)
@@ -64,21 +77,45 @@ final class CaseSession: ObservableObject {
         } else if text.count <= 60, !text.contains("\n"),
                   let q = rec.messages.last(where: { $0.kind == .question && $0.answered == nil }),
                   let key = q.key, !key.hasPrefix("__") || key.hasPrefix("__confirm:") {
+            // ردّ مكتوب على سؤال بأزرار: إن طابق زراً («نعم»، «حضر وأقر») فهو ضغطه
+            if let v = matchOption(q, text) { answer(q.id, v); return }
+            // وإلا فهو قيمة للحقل إن قبلها المحرك (مثل «بيع» ← «عقد بيع»)، وإلا فهو كلام للمحضر
             let k = key.hasPrefix("__confirm:") ? String(key.dropFirst(10)) : key
-            // ردّ مكتوب على سؤال بأزرار (مثل «بيع» بدل الخيارات المعروضة): يُعدّ جواباً لا إضافةً للمحضر
-            answerMark(q.id, text)
-            rec.state = engine.setField(rec.state, k, text)
-            refresh()
-            advance()
+            let next = engine.setField(rec.state, k, text)
+            if engine.view(next).fields.first(where: { $0.k == k })?.status == "user" {
+                answerMark(q.id, text)
+                rec.state = next
+                refresh()
+                advance()
+            } else {
+                appendToMinutes(text, note: "«\(text)» ليس من خيارات السؤال، فأضفته إلى المحضر وأعدت تحليله. أجب السؤال بالأزرار.")
+            }
         } else {
-            post(Msg(role: .user, kind: .text, text: text))
-            rec.minutes += "\n" + text
-            rec.state = engine.analyze(rec.minutes, state: rec.state)
-            refresh()
-            bot("أضفت كلامك إلى المحضر وأعدت تحليله.")
-            advance()
+            appendToMinutes(text, note: "أضفت كلامك إلى المحضر وأعدت تحليله.")
         }
         save()
+    }
+
+    private func appendToMinutes(_ text: String, note: String) {
+        post(Msg(role: .user, kind: .text, text: text))
+        rec.minutes += "\n" + text
+        rec.state = engine.analyze(rec.minutes, state: rec.state)
+        refresh()
+        bot(note)
+        advance()
+    }
+
+    /// يطابق الرد المكتوب أحد أزرار السؤال (بالنص الظاهر أو بالقيمة)؛ عند الالتباس لا شيء
+    private func matchOption(_ q: Msg, _ text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        let pairs = q.options.indices.map { (q.options[$0], q.label(at: $0)) }
+        if let p = pairs.first(where: { $0.0 == t || $0.1 == t }) { return p.0 }
+        if t.count >= 2 {
+            let a = pairs.filter { $0.1.contains(t) }
+            if a.count == 1 { return a[0].0 }
+        }
+        let b = pairs.filter { $0.1.count >= 2 && t.contains($0.1) }
+        return b.count == 1 ? b[0].0 : nil
     }
 
     private func askType() {
@@ -107,8 +144,9 @@ final class CaseSession: ObservableObject {
             if key.hasPrefix("__confirm:") {
                 let k = String(key.dropFirst(10))
                 if value == "yes" {
-                    let current = view.fields.first { $0.k == k }?.value ?? ""
-                    rec.state = engine.setField(rec.state, k, current)
+                    if let current = view.fields.first(where: { $0.k == k })?.value, !current.isEmpty {
+                        rec.state = engine.setField(rec.state, k, current)
+                    }
                     refresh(); advance()
                 } else {
                     askField(k, forceEdit: true)
@@ -140,6 +178,7 @@ final class CaseSession: ObservableObject {
     }
 
     func chooseType(_ key: String) {
+        closeOpenPrompts()
         rec.state = engine.setType(rec.state, key)
         rec.typeConfirmed = true
         rec.evidenceDone = false
@@ -160,6 +199,7 @@ final class CaseSession: ObservableObject {
         let work = Msg(role: .bot, kind: .working, text: images.count == 1 ? "أقرأ المرفق…" : "أقرأ \(images.count) مرفقات…")
         post(work); save()
         busy = true
+        reading += 1
         Task {
             for (i, img) in images.enumerated() {
                 let r = await OCR.read(image: img)
@@ -174,6 +214,7 @@ final class CaseSession: ObservableObject {
         let work = Msg(role: .bot, kind: .working, text: "أقرأ الملف…")
         post(work); save()
         busy = true
+        reading += 1
         Task {
             let accessing = url.startAccessingSecurityScopedResource()
             let r = await OCR.read(pdf: url)
@@ -202,6 +243,9 @@ final class CaseSession: ObservableObject {
 
     private func finishReading(_ workID: UUID) {
         rec.messages.removeAll { $0.id == workID }
+        reading = max(0, reading - 1)
+        // عدة ملفات معاً: لا نصيغ إلا بعد انتهاء آخرها، وإلا تكررت بطاقات التسبيب
+        guard reading == 0 else { save(); return }
         busy = false
         if !rec.minutes.isEmpty && rec.typeConfirmed { advance() }
         else if rec.minutes.isEmpty { bot("الحين الصق نص المحضر، وأربطه بالمرفقات.") }
@@ -263,6 +307,10 @@ final class CaseSession: ObservableObject {
     }
 
     private func produce() {
+        // البطاقات السابقة غير المعدّلة تُعلَّم بأنها نسخة سابقة، لئلا يُنسخ نص قديم
+        for i in rec.messages.indices where rec.messages[i].kind == .tasbeeb && !rec.messages[i].edited {
+            rec.messages[i].answered = "old"
+        }
         var lines: [String] = []
         if view.generic { lines.append("هذا القسم بهيكل عام؛ عدّل النص ثم احفظه بـ«حفظ صياغتي» ليُستعمل لاحقاً.") }
         if let parts = view.parts, !parts.isEmpty {
@@ -287,13 +335,25 @@ final class CaseSession: ObservableObject {
         refresh()
         bot(note)
         rec.evidenceDone = true
-        if rec.messages.contains(where: { ($0.kind == .question) && $0.answered == nil }) {
-            for i in rec.messages.indices where rec.messages[i].kind == .question && rec.messages[i].answered == nil {
-                rec.messages[i].answered = "—"
-            }
-        }
+        closeOpenPrompts()
         produce()
         save()
+    }
+
+    /// يغلق الأسئلة وبطاقة البينات المفتوحة، وإلا بقي advance() متوقفاً عندها
+    private func closeOpenPrompts() {
+        for i in rec.messages.indices
+        where (rec.messages[i].kind == .question || rec.messages[i].kind == .evidence) && rec.messages[i].answered == nil {
+            rec.messages[i].answered = "—"
+        }
+    }
+
+    /// حفظ تعديلات شاشة البيانات ولو أُغلقت دون «إعادة الصياغة»
+    func commitEdits() { save() }
+
+    /// قضية فُتحت ثم تُركت فارغة: لا تبقى في القائمة
+    func discardIfEmpty() {
+        if rec.minutes.isEmpty && rec.messages.isEmpty && rec.state == "{}" { store.delete(rec.id) }
     }
 
     func setFieldDirect(_ k: String, _ v: String) {
@@ -316,20 +376,44 @@ final class CaseSession: ObservableObject {
         }
     }
 
-    func saveWording(_ text: String) {
+    /// مفتاح الصياغة: لكل جزء من الضبط (بينة المدعي، رصد البينات، التسبيب والحكم) صياغته
+    private func wordingKey(_ title: String?) -> String {
+        guard let t = title, !t.isEmpty else { return view.type }
+        return view.type + "|" + t
+    }
+
+    func saveWording(_ m: Msg) {
         guard !view.type.isEmpty else { return }
-        SavedWording.set(view.type, engine.tokenize(rec.state, text))
-        bot("حفظت صياغتك لنوع «\(view.typeName)»، وتقدر تستعملها في القضايا القادمة من نفس النوع.")
+        SavedWording.set(wordingKey(m.title), engine.tokenize(rec.state, m.text))
+        let part = m.title.map { " (\($0))" } ?? ""
+        bot("حفظت صياغتك\(part) لنوع «\(view.typeName)»، وتقدر تستعملها في القضايا القادمة من نفس النوع.")
         save()
     }
 
-    var hasSavedWording: Bool { !view.type.isEmpty && SavedWording.get(view.type) != nil }
+    var hasSavedWording: Bool {
+        guard !view.type.isEmpty else { return false }
+        let all = SavedWording.all()
+        return all[view.type] != nil || all.keys.contains { $0.hasPrefix(view.type + "|") }
+    }
 
     func useSavedWording() {
-        guard let t = SavedWording.get(view.type) else { return }
-        var m = Msg(role: .bot, kind: .tasbeeb, text: engine.fill(rec.state, t), lines: ["من صياغتك المحفوظة."])
-        m.edited = true
-        post(m)
+        guard !view.type.isEmpty else { return }
+        let parts = view.parts ?? []
+        let saved = parts.map { SavedWording.get(wordingKey($0.title)) }
+        if !parts.isEmpty && saved.contains(where: { $0 != nil }) {
+            // كل الأجزاء: المحفوظ منها بصياغة القاضي، والباقي كما صاغه المحرك
+            for (p, s) in zip(parts, saved) {
+                var m = Msg(role: .bot, kind: .tasbeeb, text: s.map { engine.fill(rec.state, $0) } ?? p.text,
+                            lines: s == nil ? [] : ["من صياغتك المحفوظة."])
+                m.title = p.title
+                m.edited = s != nil
+                post(m)
+            }
+        } else if let t = SavedWording.get(view.type) {
+            var m = Msg(role: .bot, kind: .tasbeeb, text: engine.fill(rec.state, t), lines: ["من صياغتك المحفوظة."])
+            m.edited = true
+            post(m)
+        } else { return }
         save()
     }
 

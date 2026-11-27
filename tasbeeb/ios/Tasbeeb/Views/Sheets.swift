@@ -77,7 +77,8 @@ struct AlertsSheet: View {
                             Text(verbatim: a.title).font(F.ui(15, .bold)).foregroundStyle(c.ink)
                             if !a.body.isEmpty { Para(text: a.body, size: 14, spacing: 4) }
                             ForEach(Array(a.checks.enumerated()), id: \.offset) { j, q in
-                                let id = "\(s.view.type)_\(i)_\(j)"
+                                // المفتاح بعنوان التنبيه لا بترتيبه: يتغير الترتيب كلما أضيف تنبيه قبله
+                                let id = "\(s.view.type)_\(a.title)_\(j)"
                                 Button {
                                     s.setCheck(id, !(s.rec.checks[id] ?? false))
                                 } label: {
@@ -166,6 +167,7 @@ struct DetailsSheet: View {
         }
         .background(T.bg.ignoresSafeArea())
         .presentationDetents([.large])
+        .onDisappear { if changed { s.commitEdits() } }
         .appEnvironment()
     }
 }

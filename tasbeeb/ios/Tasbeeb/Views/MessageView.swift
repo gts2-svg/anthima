@@ -146,7 +146,8 @@ struct MessageView: View {
     private var tasbeeb: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(verbatim: (m.title ?? "التسبيب") + (m.edited ? " (معدّل)" : "")).font(F.ui(12, .bold)).foregroundStyle(T.accent)
+                Text(verbatim: (m.title ?? "التسبيب") + (m.edited ? " (معدّل)" : "") + (m.answered == "old" ? " — نسخة سابقة" : ""))
+                    .font(F.ui(12, .bold)).foregroundStyle(m.answered == "old" ? T.muted : T.accent)
                 Spacer()
                 if !s.view.catName.isEmpty {
                     Text(verbatim: s.view.catName).font(F.ui(11, .semibold)).foregroundStyle(T.cat(s.view.cat).ink)
@@ -188,7 +189,7 @@ struct MessageView: View {
                 }
                 .accessibilityLabel("تعديل النص")
                 Menu {
-                    Button { s.saveWording(m.text) } label: { Label("حفظ صياغتي لهذا النوع", systemImage: "bookmark") }
+                    Button { s.saveWording(m) } label: { Label("حفظ صياغتي لهذا النوع", systemImage: "bookmark") }
                     if s.hasSavedWording { Button { s.useSavedWording() } label: { Label("استعمل صياغتي المحفوظة", systemImage: "text.badge.checkmark") } }
                     Button(action: onDetails) { Label("مراجعة البيانات", systemImage: "list.bullet.rectangle") }
                 } label: {

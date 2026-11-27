@@ -20,7 +20,14 @@ final class CaseStore: ObservableObject {
         guard let d = try? Data(contentsOf: file) else { return }
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
-        cases = (try? dec.decode([CaseRecord].self, from: d)) ?? []
+        do {
+            cases = try dec.decode([CaseRecord].self, from: d)
+        } catch {
+            // لا يُستبدل الملف بقائمة فارغة عند أول حفظ: تُحفظ نسخة منه أولاً
+            let stamp = Int(Date().timeIntervalSince1970)
+            try? fm.copyItem(at: file, to: dir.appendingPathComponent("cases-unreadable-\(stamp).json"))
+            cases = []
+        }
     }
 
     private func persist() {
