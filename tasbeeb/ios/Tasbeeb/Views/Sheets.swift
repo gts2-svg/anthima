@@ -146,7 +146,7 @@ struct DetailsSheet: View {
                                 .accessibilityLabel("حذف المرفق")
                             }
                             .padding(12)
-                            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(T.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                     }
                 }
@@ -203,7 +203,7 @@ struct FieldEditor: View {
                                 .font(F.ui(13, on ? .semibold : .regular))
                                 .foregroundStyle(on ? Color.white : T.ink)
                                 .padding(.horizontal, 12).frame(minHeight: 38)
-                                .background(on ? T.accent : Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .background(on ? T.accent : T.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(on ? Color.clear : T.line))
                         }
                         .buttonStyle(.press)
@@ -213,14 +213,14 @@ struct FieldEditor: View {
                 TextField("", text: $text, prompt: Text(verbatim: f.ph).foregroundStyle(T.muted), axis: .vertical)
                     .font(F.ui(15))
                     .padding(10)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(T.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .onAppear { text = f.value }
                     .onSubmit { set(text) }
                     .onChange(of: text) { _, v in if v != f.value { set(v) } }
             }
         }
         .padding(12)
-        .background(f.status == "unc" ? T.amberSoft : (f.status == "mis" ? T.redSoft : Color.white.opacity(0.6)),
+        .background(f.status == "unc" ? T.amberSoft : (f.status == "mis" ? T.redSoft : T.card.opacity(0.6)),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
@@ -240,7 +240,7 @@ struct EditSheet: View {
                 .lineSpacing(8)
                 .scrollContentBackground(.hidden)
                 .padding(10)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(T.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal, 20)
             Button {
                 s.updateTasbeeb(msg.id, text)
@@ -270,6 +270,8 @@ struct SettingsView: View {
     @State private var hResult = ""
     @State private var confirmAll = false
     @State private var arabicOK = OCR.arabicSupported
+    @AppStorage("appearance") private var appearance = Appearance.light.rawValue
+    @AppStorage("naskhOutput") private var naskh = false
 
     private var hijriCal: Calendar {
         var c = Calendar(identifier: .islamicUmmAlQura)
@@ -300,6 +302,20 @@ struct SettingsView: View {
                             Button("تحويل") { convertH() }.font(F.ui(14, .bold))
                         }
                         if !hResult.isEmpty { Text(verbatim: hResult).font(F.ui(16, .bold)).foregroundStyle(T.accent) }
+                    }
+                    card {
+                        Text("المظهر").font(F.ui(15, .bold))
+                        Picker("المظهر", selection: $appearance) {
+                            ForEach(Appearance.allCases, id: \.rawValue) { a in Text(a.label).tag(a.rawValue) }
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle(isOn: $naskh) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("خط النسخ لنص التسبيب").font(F.ui(14))
+                                Text("ينطبق على بطاقات الناتج فقط").font(F.ui(12)).foregroundStyle(T.muted)
+                            }
+                        }
+                        .tint(T.accent)
                     }
                     card {
                         Text("قراءة المرفقات").font(F.ui(15, .bold))
@@ -337,7 +353,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) { c() }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(T.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func numField(_ p: String, _ b: Binding<String>) -> some View {

@@ -4,6 +4,8 @@ import SwiftUI
 final class CaseStore: ObservableObject {
     static let shared = CaseStore()
     @Published private(set) var cases: [CaseRecord] = []
+    /// محضر لُصق من الشاشة الرئيسية، ينتظر فتح قضيته ليُرسل إليها
+    var pendingPaste: [UUID: String] = [:]
 
     private let fm = FileManager.default
     private var dir: URL { fm.urls(for: .documentDirectory, in: .userDomainMask)[0] }

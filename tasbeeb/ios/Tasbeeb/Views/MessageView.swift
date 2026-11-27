@@ -9,6 +9,15 @@ struct MessageView: View {
     var onDetails: () -> Void
     @State private var expanded = false
     @State private var copied = false
+    @AppStorage("naskhOutput") private var naskh = false
+
+    private var isOld: Bool { m.answered == "old" }
+
+    private func copyText() {
+        UIPasteboard.general.string = m.text
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copied = false }
+    }
 
     var body: some View {
         switch m.kind {
@@ -65,7 +74,7 @@ struct MessageView: View {
     private func botBubble<C: View>(border: Color = T.line, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 8) { content() }
             .padding(.horizontal, 14).padding(.vertical, 11)
-            .background(Color.white, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18, style: .continuous))
+            .background(T.card, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18, style: .continuous))
             .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18, style: .continuous).stroke(border, lineWidth: 1))
             .frame(maxWidth: 340, alignment: .trailing)
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -145,30 +154,41 @@ struct MessageView: View {
 
     private var tasbeeb: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(verbatim: (m.title ?? "التسبيب") + (m.edited ? " (معدّل)" : "") + (m.answered == "old" ? " — نسخة سابقة" : ""))
-                    .font(F.ui(12, .bold)).foregroundStyle(m.answered == "old" ? T.muted : T.accent)
+            HStack(spacing: 8) {
+                Text(verbatim: (m.title ?? "التسبيب") + (m.edited ? " (معدّل)" : "") + (isOld ? " — نسخة سابقة" : ""))
+                    .font(F.ui(12, .bold)).foregroundStyle(isOld ? T.muted : T.accent)
                 Spacer()
-                if !s.view.catName.isEmpty {
-                    Text(verbatim: s.view.catName).font(F.ui(11, .semibold)).foregroundStyle(T.cat(s.view.cat).ink)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(T.cat(s.view.cat).soft, in: Capsule())
+                if !isOld {
+                    // نسخ سريع من رأس البطاقة دون النزول إلى آخرها
+                    Button { copyText() } label: {
+                        Label(copied ? "نُسخ" : "نسخ", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .font(F.ui(12, .bold)).foregroundStyle(T.accent)
+                            .padding(.horizontal, 10).frame(minHeight: 30)
+                            .background(T.accentSoft, in: Capsule())
+                    }
+                    .buttonStyle(.press)
+                    .accessibilityLabel("نسخ هذا الجزء")
                 }
             }
+            if isOld {
+                // نسخة قديمة: تُعرض مختصرة ولا تُنسخ، لئلا يُلصق في النظام نص سابق
+                Text(verbatim: m.text)
+                    .font(F.ui(13)).lineSpacing(4).foregroundStyle(T.muted)
+                    .lineLimit(expanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(expanded ? "عرض أقل" : "عرض النسخة السابقة") { expanded.toggle() }
+                    .font(F.ui(12, .bold)).foregroundStyle(T.muted)
+            } else {
             Text(verbatim: m.text)
-                .font(F.ui(15.5))
-                .lineSpacing(9)
+                .font(F.output(15.5, naskh: naskh))
+                .lineSpacing(naskh ? 7 : 9)
                 .foregroundStyle(T.ink)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             linesView
             Divider().overlay(T.line)
             HStack(spacing: 6) {
-                Button {
-                    UIPasteboard.general.string = m.text
-                    copied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copied = false }
-                } label: {
+                Button { copyText() } label: {
                     Label(copied ? "نُسخ" : "نسخ", systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(F.ui(14, .bold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 42)
@@ -199,9 +219,10 @@ struct MessageView: View {
                 }
                 .accessibilityLabel("المزيد")
             }
+            }
         }
         .padding(14)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(T.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(T.line))
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -247,7 +268,7 @@ struct FlowToggles: View {
                     }
                     .foregroundStyle(c.on ? Color.white : T.ink)
                     .padding(.horizontal, 12).frame(minHeight: 38)
-                    .background(c.on ? T.ink : Color.white, in: Capsule())
+                    .background(c.on ? T.accent : T.card, in: Capsule())
                     .overlay(Capsule().strokeBorder(c.on ? Color.clear : T.line))
                 }
                 .buttonStyle(.press)

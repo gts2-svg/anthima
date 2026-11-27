@@ -13,10 +13,14 @@ struct CaseView: View {
     @State private var showAlerts = false
     @State private var showDetails = false
     @State private var editing: Msg?
+    @State private var showHistory = false
+    @State private var copiedAll = false
     @FocusState private var focused: Bool
+    let inSplit: Bool
 
-    init(rec: CaseRecord) {
+    init(rec: CaseRecord, inSplit: Bool = false) {
         _s = StateObject(wrappedValue: CaseSession(rec))
+        self.inSplit = inSplit
     }
 
     var body: some View {
@@ -26,12 +30,23 @@ struct CaseView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         if s.rec.messages.isEmpty { welcome }
-                        ForEach(s.rec.messages) { m in
-                            MessageView(m: m, s: s,
-                                        onAlerts: { showAlerts = true },
-                                        onEdit: { editing = m },
-                                        onDetails: { showDetails = true })
-                                .id(m.id)
+                        let st = s.outputStart
+                        let all = s.rec.messages
+                        if let st, st > 0, !showHistory {
+                            historyRow(count: st)
+                        } else {
+                            ForEach(Array(all.prefix(st ?? all.count))) { m in row(m) }
+                            if let st, st > 0 {
+                                Button { withAnimation { showHistory = false } } label: {
+                                    Label("طيّ الخطوات السابقة", systemImage: "chevron.up").font(F.ui(13, .semibold)).foregroundStyle(T.accent)
+                                }
+                                .buttonStyle(.press)
+                            }
+                        }
+                        if let st {
+                            outputBar.id("out")
+                            // التنبيهات صارت في الشريط فوق الناتج، فلا تتكرر فقاعتها بعده
+                            ForEach(Array(all.suffix(from: st)).filter { $0.kind != .alerts }) { m in row(m) }
                         }
                         Color.clear.frame(height: 6).id("bottom")
                     }
@@ -43,9 +58,19 @@ struct CaseView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: s.rec.messages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    // بعد الصياغة: إلى أول الناتج (التنبيهات ثم البينة) لا إلى آخره
+                    let lastKind = s.rec.messages.last?.kind
+                    if s.outputStart != nil && (lastKind == .tasbeeb || lastKind == .alerts) {
+                        showHistory = false
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("out", anchor: .top) }
+                    } else {
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
                 }
-                .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+                .onAppear {
+                    if s.outputStart != nil { proxy.scrollTo("out", anchor: .top) } else { proxy.scrollTo("bottom", anchor: .bottom) }
+                    if let t = CaseStore.shared.pendingPaste.removeValue(forKey: s.rec.id) { s.send(t) }
+                }
             }
             composer
         }
@@ -81,22 +106,97 @@ struct CaseView: View {
         .onDisappear { s.discardIfEmpty() }
     }
 
+    private var subtitle: String {
+        if s.busy { return "يقرأ المرفقات…" }
+        if let p = s.progress { return (s.view.catName.isEmpty ? "" : s.view.catName + " · ") + "سؤال \(p.current) من \(p.total)" }
+        return s.view.catName.isEmpty ? "يقرأ على جهازك" : s.view.catName
+    }
+
+    @ViewBuilder private func row(_ m: Msg) -> some View {
+        MessageView(m: m, s: s,
+                    onAlerts: { showAlerts = true },
+                    onEdit: { editing = m },
+                    onDetails: { showDetails = true })
+            .id(m.id)
+    }
+
+    /// ما قبل الناتج مطويّ في سطر واحد
+    private func historyRow(count: Int) -> some View {
+        Button { withAnimation { showHistory = true } } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(T.accent)
+                Text(verbatim: "تم: المحضر والأسئلة (\(count) رسالة)").font(F.ui(13, .semibold)).foregroundStyle(T.ink)
+                Spacer()
+                Text("عرض").font(F.ui(13, .bold)).foregroundStyle(T.accent)
+                Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(T.accent)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .background(T.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(T.line))
+        }
+        .buttonStyle(.press)
+    }
+
+    /// فوق الناتج: شريط التنبيهات، ونسخ الأجزاء كلها
+    private var outputBar: some View {
+        let a = s.view.alerts
+        let red = a.contains { $0.lvl == "red" }
+        return VStack(spacing: 8) {
+            if !a.isEmpty {
+                Button { showAlerts = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: red ? "exclamationmark.triangle.fill" : "bell.fill")
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(verbatim: "\(a.count) " + (a.count == 1 ? "تنبيه" : (a.count <= 10 ? "تنبيهات" : "تنبيهاً")) + " · للتذكير لا للضبط")
+                                .font(F.ui(13, .bold))
+                            Text(verbatim: (a.first(where: { $0.lvl == "red" }) ?? a[0]).title).font(F.ui(13)).lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(red ? T.red : T.amber)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(red ? T.redSoft : T.amberSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(red ? T.redLine : T.amberLine))
+                }
+                .buttonStyle(.press)
+            }
+            if s.currentParts.count > 1 {
+                Button {
+                    UIPasteboard.general.string = s.currentParts.map { $0.text }.joined(separator: "\n\n")
+                    copiedAll = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copiedAll = false }
+                } label: {
+                    Label(copiedAll ? "نُسخت الأجزاء كلها" : "نسخ الكل (\(s.currentParts.count) أجزاء)", systemImage: copiedAll ? "checkmark" : "doc.on.doc.fill")
+                        .font(F.ui(13, .bold)).foregroundStyle(T.accent)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(T.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.press)
+                .sensoryFeedback(.success, trigger: copiedAll) { _, now in now }
+            }
+        }
+    }
+
     // MARK: الشريط العلوي
 
     private var header: some View {
         HStack(spacing: 10) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.backward").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.ink)
-                    .frame(width: 40, height: 44)
+            if !inSplit {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.backward").font(.system(size: 18, weight: .semibold)).foregroundStyle(T.ink)
+                        .frame(width: 40, height: 44)
+                }
+                .accessibilityLabel("رجوع")
             }
-            .accessibilityLabel("رجوع")
             Image(systemName: "text.bubble.fill")
                 .font(.system(size: 17)).foregroundStyle(.white)
                 .frame(width: 40, height: 40).background(T.accent, in: Circle())
             VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: s.rec.title).font(F.ui(16, .bold)).foregroundStyle(T.ink).lineLimit(1)
-                Text(verbatim: s.busy ? "يقرأ المرفقات…" : (s.view.catName.isEmpty ? "يقرأ على جهازك" : s.view.catName))
-                    .font(F.ui(12)).foregroundStyle(T.accent)
+                Text(verbatim: subtitle)
+                    .font(F.ui(12)).foregroundStyle(s.progress == nil ? T.accent : T.amber)
             }
             Spacer()
             if !s.view.type.isEmpty {
@@ -119,7 +219,7 @@ struct CaseView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color.white)
+        .background(T.card)
         .overlay(alignment: .bottom) { Rectangle().fill(T.line).frame(height: 1) }
     }
 
@@ -132,7 +232,7 @@ struct CaseView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(T.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(T.line))
     }
 
@@ -187,7 +287,7 @@ struct CaseView: View {
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
-        .background(Color.white)
+        .background(T.card)
         .overlay(alignment: .top) { Rectangle().fill(T.line).frame(height: 1) }
     }
 

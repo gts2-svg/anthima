@@ -8,29 +8,41 @@ extension Color {
     }
 }
 
-/// تصميم «محادثة»: خلفية فاتحة دافئة، فقاعات بيضاء، ولون فيروزي للتطبيق.
+extension Color {
+    /// لون يتبدّل مع الوضع الداكن
+    init(light: UInt32, dark: UInt32) {
+        self.init(uiColor: UIColor { tc in
+            let h = tc.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((h >> 16) & 0xFF) / 255, green: CGFloat((h >> 8) & 0xFF) / 255,
+                           blue: CGFloat(h & 0xFF) / 255, alpha: 1)
+        })
+    }
+}
+
+/// تصميم «محادثة»: خلفية فاتحة دافئة، فقاعات بيضاء، ولون فيروزي للتطبيق؛ وله وضع داكن اختياري بألوان «ليل».
 enum T {
-    static let bg = Color(hex: 0xF4F5F1)
-    static let ink = Color(hex: 0x14201C)
-    static let muted = Color(hex: 0x66706B)
-    static let line = Color(hex: 0xE2E5DF)
-    static let accent = Color(hex: 0x0F766E)
-    static let accentSoft = Color(hex: 0xCCEDE8)
-    static let amber = Color(hex: 0xB45309)
-    static let amberSoft = Color(hex: 0xFEF3C7)
-    static let amberLine = Color(hex: 0xF2D49B)
-    static let red = Color(hex: 0xB42318)
-    static let redSoft = Color(hex: 0xFDE8E6)
-    static let redLine = Color(hex: 0xF5C2BE)
+    static let bg = Color(light: 0xF4F5F1, dark: 0x0F1513)
+    static let card = Color(light: 0xFFFFFF, dark: 0x1A2320)
+    static let ink = Color(light: 0x14201C, dark: 0xE6ECE8)
+    static let muted = Color(light: 0x66706B, dark: 0x9AA6A0)
+    static let line = Color(light: 0xE2E5DF, dark: 0x2B3632)
+    static let accent = Color(light: 0x0F766E, dark: 0x13897D)
+    static let accentSoft = Color(light: 0xCCEDE8, dark: 0x123A36)
+    static let amber = Color(light: 0xB45309, dark: 0xF5B54A)
+    static let amberSoft = Color(light: 0xFEF3C7, dark: 0x3A2A10)
+    static let amberLine = Color(light: 0xF2D49B, dark: 0x6B4E1C)
+    static let red = Color(light: 0xB42318, dark: 0xFF8A80)
+    static let redSoft = Color(light: 0xFDE8E6, dark: 0x3B1714)
+    static let redLine = Color(light: 0xF5C2BE, dark: 0x6E2A25)
     static let gold = Color(hex: 0xC9A24B)
 
     /// لون كل قسم: (الخلفية، الحبر، الحرف)
     static func cat(_ key: String) -> (soft: Color, ink: Color, letter: String) {
         switch key {
-        case "murori": return (Color(hex: 0xFFE4D6), Color(hex: 0x9A3412), "م")
-        case "ahwal": return (Color(hex: 0xEDE9FE), Color(hex: 0x5B21B6), "أ")
-        case "jazai": return (Color(hex: 0xFEE2E2), Color(hex: 0x991B1B), "ج")
-        default: return (Color(hex: 0xE0E7FF), Color(hex: 0x312E81), "ح")
+        case "murori": return (Color(light: 0xFFE4D6, dark: 0x3A2418), Color(light: 0x9A3412, dark: 0xFDBA8C), "م")
+        case "ahwal": return (Color(light: 0xEDE9FE, dark: 0x2A2346), Color(light: 0x5B21B6, dark: 0xC4B5FD), "أ")
+        case "jazai": return (Color(light: 0xFEE2E2, dark: 0x3B1C1C), Color(light: 0x991B1B, dark: 0xFCA5A5), "ج")
+        default: return (Color(light: 0xE0E7FF, dark: 0x1F2547), Color(light: 0x312E81, dark: 0xA5B4FC), "ح")
         }
     }
 
@@ -53,6 +65,10 @@ enum F {
         }
     }
     static func title(_ size: CGFloat) -> Font { .custom("Alexandria-Bold", size: size) }
+    /// خط بطاقة الناتج: النسخ اختياراً من الإعدادات، وإلا خط التطبيق
+    static func output(_ size: CGFloat, naskh: Bool) -> Font {
+        naskh ? .custom("NotoNaskhArabic-Regular", size: size + 1.5) : ui(size)
+    }
 }
 
 extension View {
@@ -60,8 +76,14 @@ extension View {
         environment(\.layoutDirection, .rightToLeft)
             .environment(\.locale, Locale(identifier: "ar_SA@numbers=latn"))
             .tint(T.accent)
-            .preferredColorScheme(.light)
     }
+}
+
+/// المظهر المختار من الإعدادات: فاتح (الافتراضي) أو داكن أو حسب الجهاز
+enum Appearance: String, CaseIterable {
+    case light, dark, system
+    var label: String { self == .light ? "فاتح" : (self == .dark ? "داكن" : "حسب الجهاز") }
+    var scheme: ColorScheme? { self == .light ? .light : (self == .dark ? .dark : nil) }
 }
 
 /// ضغطة لينة مع اهتزاز خفيف.
@@ -88,7 +110,7 @@ struct RoundIcon: View {
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(Color.white, in: Circle())
+            .background(T.card, in: Circle())
             .overlay(Circle().strokeBorder(T.line))
     }
 }
@@ -103,7 +125,7 @@ struct ReplyChip: View {
             .foregroundStyle(on ? Color.white : T.accent)
             .padding(.horizontal, 15)
             .frame(minHeight: 40)
-            .background(on ? T.accent : Color.white, in: Capsule())
+            .background(on ? T.accent : T.card, in: Capsule())
             .overlay(Capsule().strokeBorder(T.accent, lineWidth: 1.5))
     }
 }

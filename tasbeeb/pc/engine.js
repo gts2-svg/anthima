@@ -1920,7 +1920,7 @@ const TB = {
       return {k:fd.k, label:fd.label, kind:fd.kind, options:fd.options || [], labels:fd.options ? fd.options.map(o => fd.labels ? fd.labels[o] : o) : [], value:v, status:s, req:!!fd.req, ph:fd.ph || ''};
     }) : [];
     const c = ctx();
-    const chips = t ? t.ev.concat(EV_COMMON.filter(e => !e.when || e.when(c))).map(e => ({id:e.id, label:e.label, on:S.ev.has(e.id)})) : [];
+    const chips = t ? t.ev.concat(t.cat==='jazai' ? [] : EV_COMMON.filter(e => !e.when || e.when(c))).map(e => ({id:e.id, label:e.label, on:S.ev.has(e.id)})) : [];
     let alerts = []; try { alerts = buildAlerts().map(a => ({lvl:a.lvl, title:a.t, body:a.b || '', checks:a.checks || []})); } catch(e) { alerts = [{lvl:'warn', title:'تعذّر حساب التنبيهات', body:String(e && e.message || e), checks:[]}]; }
     let text = '', parts = []; try { const g = generate(); if(Array.isArray(g)){ parts = g.map(x=>({title:x.title, text:soloVoice(x.text)})); text = parts.map(x=>x.text).join('\n\n'); } else text = soloVoice(g); } catch(e) { text = 'تعذّرت الصياغة: ' + e.message; }
     return JSON.stringify({cat:S.cat, catName:CATS[S.cat] || '', type:S.type, typeName:t ? t.name : '', conf:S.conf,

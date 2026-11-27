@@ -51,6 +51,31 @@ final class CaseSession: ObservableObject {
         post(Msg(role: .bot, kind: .info, text: text, level: level, lines: lines))
     }
 
+    /// بداية الناتج الحالي في المحادثة: أول بطاقة من آخر صياغة (ما قبلها يُطوى)
+    var outputStart: Int? {
+        let ms = rec.messages
+        guard let last = ms.lastIndex(where: { $0.kind == .tasbeeb && $0.answered != "old" }) else { return nil }
+        var i = last
+        while i > 0 && ms[i - 1].kind == .tasbeeb && ms[i - 1].answered != "old" { i -= 1 }
+        return i
+    }
+
+    /// بطاقات الناتج الحالي
+    var currentParts: [Msg] {
+        guard let st = outputStart else { return [] }
+        return rec.messages[st...].filter { $0.kind == .tasbeeb && $0.answered != "old" }
+    }
+
+    /// «سؤال ٢ من ٣» قبل الصياغة
+    var progress: (current: Int, total: Int)? {
+        guard rec.typeConfirmed, !rec.ready, !view.type.isEmpty else { return nil }
+        let remaining = view.fields.filter { $0.needsAnswer && !rec.skipped.contains($0.k) }.count
+            + ((!rec.evidenceDone && !view.chips.isEmpty) ? 1 : 0)
+        guard remaining > 0 else { return nil }
+        let asked = rec.messages.filter { ($0.kind == .question || $0.kind == .evidence) && $0.answered != nil && $0.key != "__type" }.count
+        return (asked + 1, asked + remaining)
+    }
+
     /// سؤال ما زال ينتظر رداً مكتوباً
     var pendingTextQuestion: Msg? {
         rec.messages.last { $0.kind == .question && $0.expectsText && $0.answered == nil }
